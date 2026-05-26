@@ -79,13 +79,23 @@ def init_schema() -> None:
         # Per-label property indexes (Memgraph has no composite indexes).
         wanted_indexes = [
             ("Project", "name"),
-            ("Symbol", "project"),
-            ("Symbol", "id"),
-            ("Symbol", "name"),
-            ("Symbol", "file"),
-            ("Symbol", "kind"),
             ("File", "project"),
             ("File", "path"),
+            ("GqlOperation", "project"),
+            ("GqlOperation", "name"),
+            ("GqlOperation", "symbol"),
+            ("GqlHook", "project"),
+            ("GqlHook", "name"),
+            ("GqlHook", "symbol"),
+            ("Route", "project"),
+            ("Route", "path"),
+            ("Component", "project"),
+            ("Component", "name"),
+            ("Component", "file"),
+            ("Guard", "project"),
+            ("Guard", "name"),
+            ("Permission", "project"),
+            ("Permission", "key"),
         ]
         for label, prop in wanted_indexes:
             if (label, prop) not in existing_indexes:

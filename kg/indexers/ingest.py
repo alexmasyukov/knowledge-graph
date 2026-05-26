@@ -9,13 +9,14 @@ from ..settings import ProjectConfig
 from ..writers.graph import attach_to_project, write_edges, write_nodes
 from .base import Extractor, IndexerContext, IngestResult
 from .gql import EXTRACTOR as GQL
+from .routes import EXTRACTOR as ROUTES
 from .scip_loader import ScipIndex
 from .scip_runner import index_project as run_scip
 
 EXTRACTORS: list[Extractor] = [
     GQL,
-    # routes / permissions / pages / e2e / scss / docs / types
-    # plug in here as they land.
+    ROUTES,
+    # permissions / pages / e2e / scss / docs / types — plug in as they land.
 ]
 
 

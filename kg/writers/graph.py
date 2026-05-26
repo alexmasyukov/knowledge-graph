@@ -28,7 +28,7 @@ NODE_KEYS: dict[str, tuple[str, ...]] = {
     "GqlOperation": ("project", "symbol"),
     "GqlHook":      ("project", "symbol"),
     "Component":    ("project", "file", "name"),
-    "Route":        ("project", "path"),
+    "Route":        ("project", "path", "depth", "line"),
     "Page":         ("project", "domain", "entity"),
     "Permission":   ("project", "key"),
     "Role":         ("project", "code"),
