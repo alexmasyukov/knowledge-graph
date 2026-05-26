@@ -7,20 +7,16 @@ import {
   PropertyAssignment,
   StringLiteral,
   PropertyAccessExpression,
+  TemplateExpression,
+  NoSubstitutionTemplateLiteral,
 } from 'ts-morph'
 
 import { analyzeJsxElement } from './jsx.js'
 import type { JsxAnalysis, RouteRecord } from './types.js'
 
-function getStringPropFromObject(obj: ObjectLiteralExpression, name: string): string | null {
-  const prop = obj.getProperty(name)
-  if (!prop || prop.getKind() !== SyntaxKind.PropertyAssignment) return null
-  const init = (prop as PropertyAssignment).getInitializer()
-  if (!init) return null
-  if (init.getKind() === SyntaxKind.StringLiteral) return (init as StringLiteral).getLiteralValue()
-  // PageMode.CREATE → resolve enum value
-  if (init.getKind() === SyntaxKind.PropertyAccessExpression) {
-    const pa = init as PropertyAccessExpression
+function resolveEnumLikeExpression(expr: Node): string {
+  if (expr.getKind() === SyntaxKind.PropertyAccessExpression) {
+    const pa = expr as PropertyAccessExpression
     const propName = pa.getName()
     try {
       const sym = pa.getNameNode().getSymbol()
@@ -37,6 +33,37 @@ function getStringPropFromObject(obj: ObjectLiteralExpression, name: string): st
       // ignore
     }
     return propName.toLowerCase()
+  }
+  if (expr.getKind() === SyntaxKind.Identifier) {
+    return expr.getText().toLowerCase()
+  }
+  // Last-resort placeholder kept so the original surface form survives
+  // in the route path — better than dropping a segment silently.
+  return `\${${expr.getText()}}`
+}
+
+function getStringPropFromObject(obj: ObjectLiteralExpression, name: string): string | null {
+  const prop = obj.getProperty(name)
+  if (!prop || prop.getKind() !== SyntaxKind.PropertyAssignment) return null
+  const init = (prop as PropertyAssignment).getInitializer()
+  if (!init) return null
+  if (init.getKind() === SyntaxKind.StringLiteral) return (init as StringLiteral).getLiteralValue()
+  if (init.getKind() === SyntaxKind.NoSubstitutionTemplateLiteral) {
+    return (init as NoSubstitutionTemplateLiteral).getLiteralValue()
+  }
+  // PageMode.CREATE → resolve enum value
+  if (init.getKind() === SyntaxKind.PropertyAccessExpression) {
+    return resolveEnumLikeExpression(init)
+  }
+  // `:id/${PageMode.EDIT}` → "id/edit"
+  if (init.getKind() === SyntaxKind.TemplateExpression) {
+    const tpl = init as TemplateExpression
+    let out = tpl.getHead().getLiteralText()
+    for (const span of tpl.getTemplateSpans()) {
+      out += resolveEnumLikeExpression(span.getExpression())
+      out += span.getLiteral().getLiteralText()
+    }
+    return out
   }
   return init.getText().replace(/^['"`]|['"`]$/g, '')
 }
