@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from ..db import session
 from ..extractors import gql as gql_extractor
+from ..extractors import routes as routes_extractor
 from ..settings import settings
 
 
@@ -54,14 +55,16 @@ async def reindex(project: str | None = None) -> dict:
             )
             stats.raise_for_status()
 
-            # 3) extractors
+            # 3) extractors (gql first — routes depends on known gql symbols)
             gql_result = await gql_extractor.run_for_project(proj.name)
+            routes_result = await routes_extractor.run_for_project(proj.name)
 
             results.append(
                 {
                     "register": register,
                     "stats": stats.json(),
                     "gql": gql_result,
+                    "routes": routes_result,
                 }
             )
 

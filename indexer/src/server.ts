@@ -1,6 +1,7 @@
 import Fastify from 'fastify'
 import { ProjectRegistry } from './project.js'
 import { extractGql } from './extractors/gql.js'
+import { extractRoutes } from './extractors/routes.js'
 
 const PORT = Number(process.env.INDEXER_PORT ?? 7401)
 const HOST = process.env.INDEXER_HOST ?? '127.0.0.1'
@@ -34,6 +35,18 @@ app.post<{ Body: { project: string } }>('/extract/gql', async (req) => {
   const { project } = req.body
   const proj = registry.get(project)
   return extractGql(proj)
+})
+
+app.post<{
+  Body: { project: string; routerFiles: string[]; knownHooks: string[]; knownOperations: string[] }
+}>('/extract/routes', async (req) => {
+  const { project, routerFiles, knownHooks, knownOperations } = req.body
+  const proj = registry.get(project)
+  return extractRoutes(proj, {
+    routerFiles,
+    knownHooks: new Set(knownHooks),
+    knownOperations: new Set(knownOperations),
+  })
 })
 
 app.listen({ port: PORT, host: HOST })
