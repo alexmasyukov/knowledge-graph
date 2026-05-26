@@ -167,6 +167,18 @@ knowledge-graph/
     └── cli.py
 ```
 
+## Архитектурные решения
+
+Короткие записки о неочевидном выборе технологий — в `docs/adr/`.
+Каждая отвечает на один вопрос «почему X, а не альтернативы».
+
+- [0001 — Neo4j, не Postgres](docs/adr/0001-neo4j-as-the-graph-store.md)
+- [0002 — ts-morph, не SCIP/tree-sitter](docs/adr/0002-ts-morph-instead-of-scip-or-tree-sitter.md)
+- [0003 — Node sidecar по HTTP, не stdio](docs/adr/0003-node-sidecar-over-http.md)
+- [0004 — REST, не GraphQL](docs/adr/0004-rest-not-graphql.md)
+- [0005 — Один граф, проекты тегаются](docs/adr/0005-multi-project-single-repo.md)
+- [0006 — Порядок экстракторов](docs/adr/0006-gql-extractor-runs-first.md)
+
 ## Безопасность
 
 - `.env` в `.gitignore` — все секреты (пароль Neo4j, пути к проектам) живут только там
