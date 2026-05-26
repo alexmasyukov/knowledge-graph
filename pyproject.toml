@@ -43,6 +43,7 @@ ignore = [
   "SIM117", # combine nested `with` — splitting reads better with rich's context managers
   "RUF001", # ambiguous unicode in strings — we use unicode glyphs in CLI/UI on purpose
   "RUF002", # same, in docstrings
+  "RUF003", # same, in comments
 ]
 
 [tool.ruff.lint.per-file-ignores]

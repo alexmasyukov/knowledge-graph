@@ -5,13 +5,56 @@ from __future__ import annotations
 
 import os
 import signal
+import socket
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 
 from .env import CORE_URL, ENV, INDEXER_URL, LOG_DIR, NEO4J_BROWSER, ROOT, RUN_DIR
+
+
+def _port_owner(port: int) -> int | None:
+    """Return PID of the process listening on the given local port, or None."""
+    try:
+        out = subprocess.run(
+            ["lsof", "-ti", f":{port}"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        ).stdout.strip()
+    except Exception:
+        return None
+    if not out:
+        return None
+    # lsof may return several PIDs (parent + child); take the first.
+    return int(out.splitlines()[0])
+
+
+def _port_free(port: int) -> bool:
+    """True if no socket is listening on (127.0.0.1, port)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(0.2)
+        try:
+            s.connect(("127.0.0.1", port))
+            return False
+        except (ConnectionRefusedError, OSError):
+            return True
+
+
+class PortBusy(RuntimeError):
+    """Raised when a service's port is held by a foreign process."""
+
+    def __init__(self, service: str, port: int, blocker_pid: int):
+        self.service = service
+        self.port = port
+        self.blocker_pid = blocker_pid
+        super().__init__(
+            f"{service}: port {port} is busy (held by PID {blocker_pid}). "
+            f"Kill it with `kill {blocker_pid}` (or `kill -9 {blocker_pid}`) and retry."
+        )
 
 
 class Service:
@@ -61,9 +104,30 @@ class Service:
         except Exception:
             return False
 
+    @property
+    def port(self) -> int:
+        return urlparse(self.url).port or 0
+
+    def port_blocker(self) -> int | None:
+        """If our port is taken by a process we don't own, return its PID.
+        Returns None when the port is free or already owned by us."""
+        my_pid = self.pid()
+        owner = _port_owner(self.port)
+        if owner is None:
+            return None
+        if my_pid and owner == my_pid:
+            return None
+        return owner
+
     def start(self) -> None:
-        if self.alive():
-            return
+        """Start the service. Raises PortBusy if the port is held by a
+        foreign process so the menu can surface a useful message
+        instead of a silent crash."""
+        if self.alive() and not _port_free(self.port):
+            return  # already running and listening
+        blocker = self.port_blocker()
+        if blocker is not None:
+            raise PortBusy(self.name, self.port, blocker)
         # The subprocess keeps the file descriptor open for its lifetime —
         # we deliberately don't use a context manager here.
         log_fh = open(self.log_file, "ab", buffering=0)  # noqa: SIM115

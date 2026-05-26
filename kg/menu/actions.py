@@ -10,7 +10,7 @@ import httpx
 import questionary
 
 from .env import CORE_URL, NEO4J_BROWSER, PROJECTS
-from .services import CORE, INDEXER, neo4j_down, neo4j_state, neo4j_up
+from .services import CORE, INDEXER, PortBusy, neo4j_down, neo4j_state, neo4j_up
 from .ui import MENU_STYLE, console
 
 
@@ -25,18 +25,24 @@ def start_all() -> None:
                 time.sleep(1)
     console.print("[green]✓[/green] Neo4j ready")
 
-    with console.status("[cyan]Starting indexer…", spinner="dots"):
-        INDEXER.start()
-        ok = INDEXER.wait_healthy(15)
-    console.print(
-        f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] indexer {'ready' if ok else 'failed'} — see {INDEXER.log_file}"
-    )
+    _start_svc(INDEXER, "indexer")
+    _start_svc(CORE, "core")
 
-    with console.status("[cyan]Starting core API…", spinner="dots"):
-        CORE.start()
-        ok = CORE.wait_healthy(15)
+
+def _start_svc(svc, label: str) -> None:
+    try:
+        with console.status(f"[cyan]Starting {label}…", spinner="dots"):
+            svc.start()
+            ok = svc.wait_healthy(15)
+    except PortBusy as e:
+        console.print(
+            f"[red]✗[/red] {label}: port {e.port} is held by another process (PID {e.blocker_pid}).\n"
+            f"  Run [bold]kill {e.blocker_pid}[/bold] and try again, or use Restart all."
+        )
+        return
     console.print(
-        f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] core {'ready' if ok else 'failed'} — see {CORE.log_file}"
+        f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] "
+        f"{label} {'ready' if ok else 'failed'} — see {svc.log_file}"
     )
 
 
