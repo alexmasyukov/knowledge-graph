@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import gql, health, pages, permissions, reindex, routes
+from .api import e2e, gql, health, pages, permissions, reindex, routes
 from .db import close_driver, init_schema
 from .settings import settings
 
@@ -32,6 +32,7 @@ app.include_router(gql.router)
 app.include_router(routes.router)
 app.include_router(permissions.router)
 app.include_router(pages.router)
+app.include_router(e2e.router)
 
 
 def main() -> None:

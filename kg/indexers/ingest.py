@@ -8,6 +8,7 @@ from ..db import ensure_project, wipe_project
 from ..settings import ProjectConfig
 from ..writers.graph import attach_to_project, write_edges, write_nodes
 from .base import Extractor, IndexerContext, IngestResult
+from .e2e import EXTRACTOR as E2E
 from .gql import EXTRACTOR as GQL
 from .pages import EXTRACTOR as PAGES
 from .permissions import EXTRACTOR as PERMISSIONS
@@ -20,7 +21,8 @@ EXTRACTORS: list[Extractor] = [
     ROUTES,
     PERMISSIONS,
     PAGES,
-    # e2e / scss / docs / types — plug in as they land.
+    E2E,
+    # scss / docs / types — plug in as they land.
 ]
 
 
