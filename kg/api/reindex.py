@@ -10,6 +10,7 @@ from ..extractors import permissions as permissions_extractor
 from ..extractors import pages as pages_extractor
 from ..extractors import docs as docs_extractor
 from ..extractors import e2e as e2e_extractor
+from ..extractors import scss as scss_extractor
 from ..settings import settings
 
 
@@ -66,6 +67,7 @@ async def reindex(project: str | None = None) -> dict:
             pages_result = await pages_extractor.run_for_project(proj.name)
             docs_result = await docs_extractor.run_for_project(proj.name)
             e2e_result = await e2e_extractor.run_for_project(proj.name)
+            scss_result = await scss_extractor.run_for_project(proj.name)
 
             results.append(
                 {
@@ -77,6 +79,7 @@ async def reindex(project: str | None = None) -> dict:
                     "pages": pages_result,
                     "docs": docs_result,
                     "e2e": e2e_result,
+                    "scss": scss_result,
                 }
             )
 
