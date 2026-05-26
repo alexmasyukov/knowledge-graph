@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import docs, e2e, gql, health, pages, permissions, reindex, routes, scss, types
+from .api import docs, e2e, gql, health, pages, permissions, reindex, routes, sanity, scss, types, viz
 from .db import close_driver, init_schema
 from .settings import settings
 
@@ -36,6 +36,8 @@ app.include_router(e2e.router)
 app.include_router(scss.router)
 app.include_router(docs.router)
 app.include_router(types.router)
+app.include_router(sanity.router)
+app.include_router(viz.router)
 
 
 def main() -> None:

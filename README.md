@@ -1,188 +1,182 @@
 # knowledge-graph
 
-Локальный code intelligence для arenadata-фронтенда (`adsw`, `network`).
-Type-aware индексация на ts-morph, граф в Neo4j, REST API на FastAPI для
-MCP-сервера и Web UI.
+Code intelligence over Arenadata frontend projects (`adsw`, `network`)
+built on **scip-typescript**, **tree-sitter** and **Memgraph**. Serves
+a REST API consumed by the `arenadata-docs` MCP server (chat side) and
+a built-in cytoscape graph viewer.
 
-## Зачем оно
+## Why
 
-Открываете незнакомую страницу `/services/education/booking`. Чтобы понять,
-что там происходит, обычно надо:
+Open an unfamiliar page like `/services/education/booking`. Without a
+graph you'd usually:
 
-1. Найти этот path в `router/index.tsx`
-2. Открыть лениво подключённый компонент `Bookings`
-3. Посмотреть, какой хук он зовёт — `useBookings`
-4. Открыть хук, найти GraphQL-операцию `GET_EDUCATION_BOOKINGS`
-5. Заглянуть в её схему
-6. Проверить, какие e2e-тесты её пробивают
-7. Посмотреть, какие permissions её защищают
+1. Grep `router/index.tsx` for the path
+2. Open the lazy-imported component (`Bookings`)
+3. Find the hook it calls (`useBookings`)
+4. Open the hook, find the GraphQL operation (`GET_EDUCATION_BOOKINGS`)
+5. Pull up its schema definition
+6. Find the e2e tests that exercise it
+7. Check what permission key guards the route
 
-Семь файлов, семь grep'ов. С графом — один tool-call:
+Seven files, seven greps. With the graph it's one tool call:
 
 ```
 routes_resolve /services/education/booking
 → guards:      RouterGuard
 → permissions: education.booking.read  (ADMIN, EDUCATION_HEAD, EDUCATION_MANAGER)
-→ components:  Bookings @ pages/education/booking/Bookings.tsx:103
+→ components:  Bookings @ src/pages/education/booking/Bookings.tsx:43
 → hooks:       useBookings
-→ operations:  [query] GET_EDUCATION_BOOKINGS (GetEducationBookings)
+→ operations:  [query] GET_EDUCATION_BOOKINGS  (GetEducationBookings)
 ```
 
-Анализ — **type-aware**: используется тот же TypeScript Compiler API, что
-и в IDE. Это не regex по тексту, а настоящий `Find References`.
+The cross-file resolution is **type-aware** — backed by SCIP, the same
+indexer format Sourcegraph uses for its TypeScript code intelligence.
+Not regex over text, real `Find References`.
 
-## Стек
+## Stack
 
-| Компонент | Где | Порт |
+| Component | Where | Port |
 |---|---|---|
-| Neo4j Community (граф + Browser) | Docker | 7687 / 7474 |
-| ts-morph indexer (Fastify, Node) | локально | 7401 |
-| FastAPI core | локально | 7400 |
-| MCP-обёртка | `arenadata-mcp` | — |
+| Memgraph 3.6 + Lab | Docker | 7687 (Bolt) / 7444 (HTTP) / 3000 (Lab) |
+| FastAPI core | local (uv) | 7400 |
+| scip-typescript indexer | Node binary | n/a (subprocess) |
+| MCP wrapper | `arenadata-mcp` repo | external |
 
-## Быстрый старт
+The MCP wrapper is what chat models call — it lives in another repo and
+speaks HTTP to the URLs documented below. Keep those URL shapes stable
+across rewrites; everything else is internal.
 
-Нужно: Python 3.12+, Node 20+, `pnpm`, Docker, `uv`.
+## Quick start
+
+Requires: Python 3.12+, Node 20+, pnpm, Docker, [uv](https://docs.astral.sh/uv/).
 
 ```bash
-cp .env.example .env          # NEO4J_PASSWORD, PROJECT_<NAME>
-uv run python -m kg.cli install
-./start.sh                    # интерактивное меню (questionary + rich)
+# 1. Pin the SCIP TypeScript indexer
+cd scip-indexer && pnpm install && cd ..
+
+# 2. Bring up Memgraph
+docker compose up -d memgraph
+
+# 3. Configure projects (one PROJECT_<NAME> entry per indexed package)
+cp .env.example .env
+$EDITOR .env
+
+# 4. Run the API
+uv run uvicorn kg.server:app --host 127.0.0.1 --port 7400
+
+# 5. Index a project
+curl -X POST 'http://127.0.0.1:7400/reindex?project=adsw'
 ```
 
-После старта:
-- Neo4j Browser: <http://localhost:7474> (login: значения из `NEO4J_USER` / `NEO4J_PASSWORD` в `.env`)
-- API health:   <http://127.0.0.1:7400/health>
-- API docs:     <http://127.0.0.1:7400/docs>
-
-## Что лежит в графе
-
-После полной индексации adsw (≈55k LOC, 985 source files, ~7 секунд):
-
-| Узлы          | Сколько | Что это                                              |
-|---------------|--------:|-------------------------------------------------------|
-| GqlOperation  |     202 | query/mutation/subscription/fragment                  |
-| GqlHook       |      93 | хуки-обёртки из `src/gql/hooks/`                      |
-| Route         |     101 | роуты из React Router                                 |
-| Component     |      62 | компоненты, упомянутые в роутере                      |
-| Page          |      50 | страницы по конвенции `pages/<domain>/<entity>/`      |
-| Permission    |     135 | ключи из `PERMISSIONS` + найденные в JSX              |
-| E2eSpec       |      21 | Playwright-спеки                                      |
-| PageObject    |      19 | POM-классы из `e2e/pages/`                            |
-| TestId        |     383 | все `data-testid` в коде                              |
-| TestIdLoc     |     225 | локаторы из `*.locators.ts`                           |
-| ScssModule    |      22 | `*.module.scss`                                       |
-
-Плюс 2.6k рёбер: `RENDERS`, `WRAPS`, `USES_OPERATION`, `CALLS_HOOK`,
-`GUARDED_BY`, `REQUIRES`, `BELONGS_TO`, `USES_POM`, `RESOLVES_TO`, ...
-
-## Что можно делать
-
-Через MCP (в Claude Code / Cursor):
+## Pipeline
 
 ```
-gql_find_callsites GET_EDUCATION_BOOKING   — где используется операция
-routes_resolve /services/education/booking — полная карта роута
-permissions_info education.booking.read    — роли + роуты, требующие ключ
-pages_get education/booking                — всё про страницу
-e2e_testid_info page-action-add            — код → локатор → POM → спек
-e2e_coverage                               — покрытие testid'ов e2e
-scss_class_usage container                 — где объявлен и используется
+        scip-typescript          tree-sitter
+            │                       │
+            ▼                       ▼
+       .scip file        ┌──────────────────────┐
+            │            │ routes / permissions │
+            ▼            │ pages / e2e / scss   │
+     ┌──────────────┐    │ docs / types        │
+     │ ScipIndex    │◄───┘                      │
+     │ extractors   │  ─►   Memgraph (Bolt)
+     └──────────────┘
+            │
+            ▼
+       FastAPI ──► MCP wrapper ──► chat tools
+            │
+            └──────► /viz (cytoscape) ──► browser
 ```
 
-Через Neo4j Browser:
+Each extractor is a `kg/indexers/<name>.py` module that exposes an
+`EXTRACTOR` singleton conforming to the `Extractor` Protocol.
 
-```cypher
-// какие компоненты падут, если изменить мутацию updateBooking
-MATCH (op:GqlOperation {gql_name: 'UpdateBooking'})
-      <-[:WRAPS]-(h:GqlHook)
-      <-[:CALLS_HOOK]-(c:Component)
-RETURN c, h, op
+## What's indexed
 
-// какие e2e-тесты зависят от data-testid 'page-action-add'
-MATCH (t:TestId {value: 'page-action-add'})
-      <-[:RESOLVES_TO]-(:TestIdLoc)
-      <-[:DEFINES_LOC]-(po:PageObject)
-      <-[:USES_POM]-(spec:E2eSpec)
-RETURN spec.name, spec.file
+| Extractor | Source | Nodes / edges (adsw) |
+|---|---|---|
+| `gql` | SCIP refs in `src/gql/**` | 202 GqlOperation, 93 GqlHook |
+| `routes` | tree-sitter on `src/router/index.tsx` | 101 Route, 61 Component, 2 Guard, 30 Permission |
+| `permissions` | tree-sitter on `src/common/permissions/index.ts` | 135 Permission, 7 Role |
+| `pages` | filesystem walk of `src/pages/<domain>/<entity>/` | 56 Page, 95 Component |
+| `e2e` | tree-sitter on `src/**/*.tsx` + `playwright/tests/` | 187 TestId, 3 E2eSpec |
+| `scss` | tree-sitter on `*.module.scss` | 22 ScssModule, 67 ScssClass |
+| `docs` | tree-sitter on README/CLAUDE/mcp/docs `.md` | per repo |
+| `types` | tree-sitter on `src/types/**/*.ts` + SCIP refs | 114 Type, 1370 USES_TYPE |
 
-// топ-10 самых используемых GraphQL-хуков
-MATCH (c:Component)-[:CALLS_HOOK]->(h:GqlHook)
-RETURN h.name, count(DISTINCT c) AS users
-ORDER BY users DESC LIMIT 10
-```
-
-## Под капотом
-
-Полная индексация — пять экстракторов, по очереди:
-
-1. **gql** — Node + ts-morph бежит по `src/gql/queries/**/*.ts`, находит
-   tagged-template literals `` gql`...` ``, парсит через graphql-js,
-   достаёт operations + fragments. Потом по `src/gql/hooks/` находит
-   хуки-обёртки, через `findReferences()` собирает все вызовы.
-
-2. **routes** — парсит `router/index.tsx` как объект-литерал,
-   разворачивает JSX `element:` (guards, Lazy-wrappers, сам компонент),
-   резолвит `React.lazy(() => import(...))` до реального файла.
-
-3. **permissions** — обходит `common/permissions/index.ts` как
-   ObjectLiteralExpression, собирает leaf'ы вида
-   `{create: ['ADMIN', ...], read: [...]}` в dot-keyed permission'ы.
-
-4. **pages** — обход файловой системы по конвенции
-   `pages/<domain>/<entity>/{Entity,Entities,types,helpers,constants,...}`.
-
-5. **e2e** — regex по `e2e/tests/*.spec.ts` и `e2e/pages/*`. Собирает
-   `data-testid` строки и из e2e-локаторов, и из adsw `.tsx`. Связывает
-   по значению.
-
-Всё пишется в Neo4j через Cypher батчами. Reindex идемпотентен — старые
-узлы и рёбра проекта удаляются перед записью новых.
-
-## Под какой стек заточено
-
-Сейчас — под Arenadata-фронтенды (adsw, network):
-- React + TypeScript
-- Apollo Client + GraphQL
-- React Router v6
-- Playwright e2e с POM-конвенцией
-- `data-testid` повсюду
-
-Если у вас другой стек, экстракторы (особенно routes и pages) надо
-подгонять под ваши конвенции. Часть, которая ts-morph + GraphQL —
-довольно generic.
-
-## Структура
+## HTTP API
 
 ```
-knowledge-graph/
-├── docker-compose.yml      # Neo4j
-├── pyproject.toml          # python deps (uv)
-├── indexer/                # ts-morph extractor (Fastify :7401)
-│   └── src/
-└── kg/                     # FastAPI core (:7400)
-    ├── server.py
-    ├── api/
-    ├── extractors/
-    └── cli.py
+POST  /reindex?project=<name>
+GET   /health
+
+GET   /gql/operations[?kind&name&limit]
+GET   /gql/hooks/{name}?project
+GET   /gql/callsites?project&target
+
+GET   /routes/list[?prefix&limit]
+GET   /routes/resolve?project&path
+GET   /routes/by-component?project&name
+
+GET   /permissions/list[?prefix&role]
+GET   /permissions/info/{key}?project
+
+GET   /pages/list[?domain]
+GET   /pages/get?project&domain&entity
+
+GET   /e2e/specs[?name]
+GET   /e2e/testid/{value}?project
+GET   /e2e/coverage?project
+GET   /e2e/uncovered[?group_by_file]
+
+GET   /scss/list[?class_name]
+GET   /scss/class/{name}?project
+
+GET   /docs/list?project
+GET   /docs/search?project&q
+GET   /docs/get/{name}?project
+
+GET   /types/list[?kind&name]
+GET   /types/get/{name}?project
+GET   /types/search?project&q
+
+GET   /sanity?project           — data-quality probes
+
+GET   /viz/                     — cytoscape graph viewer
+GET   /viz/graph?cypher=…       — JSON elements payload
 ```
 
-## Архитектурные решения
+## Viz
 
-Короткие записки о неочевидном выборе технологий — в `docs/adr/`.
-Каждая отвечает на один вопрос «почему X, а не альтернативы».
+`http://127.0.0.1:7400/viz/` opens a cytoscape page wired to the
+`/viz/graph?cypher=...` endpoint. Memgraph syntax (`id(n)` not
+`elementId(n)`), read-only queries only.
 
-- [0001 — Neo4j, не Postgres](docs/adr/0001-neo4j-as-the-graph-store.md)
-- [0002 — ts-morph, не SCIP/tree-sitter](docs/adr/0002-ts-morph-instead-of-scip-or-tree-sitter.md)
-- [0003 — Node sidecar по HTTP, не stdio](docs/adr/0003-node-sidecar-over-http.md)
-- [0004 — REST, не GraphQL](docs/adr/0004-rest-not-graphql.md)
-- [0005 — Один граф, проекты тегаются](docs/adr/0005-multi-project-single-repo.md)
-- [0006 — Порядок экстракторов](docs/adr/0006-gql-extractor-runs-first.md)
+A quick demo query:
 
-## Безопасность
+```
+MATCH (r:Route {project:'adsw', path:'/services/education/booking'})
+OPTIONAL MATCH (r)-[*1..2]-(n)
+RETURN r, n
+```
 
-- `.env` в `.gitignore` — все секреты (пароль Neo4j, пути к проектам) живут только там
-- `docker-compose.yml` берёт `NEO4J_USER` / `NEO4J_PASSWORD` из `.env`; **обязательно**
-  поставить непустое значение перед первым `docker compose up`
-- Пути к индексируемым кодовым базам задаются переменными `PROJECT_<NAME>=…` в `.env`
-  и не попадают в репозиторий
+## Sanity probes
+
+`GET /sanity?project=<name>` runs every probe in `kg/api/sanity.py`
+and returns a single report. Useful right after `/reindex` to spot
+structural anomalies — duplicate hook names, orphan components,
+template substrings that leaked into stored values, unused permissions.
+Probes don't enforce anything; they surface unknowns.
+
+## Tests
+
+`uv run pytest tests/` (when present — see `WORK_LOG.md`). Tests use
+a separate Memgraph DB or a wipe-between-fixture; SCIP fixtures are
+committed to keep extractor tests hermetic.
+
+## Branch layout
+
+- `master` — the previous ts-morph + Neo4j stack (still serves the
+  live MCP wrapper if a rollback is ever needed).
+- `experiment/pro-stack` — current development. SCIP + tree-sitter +
+  Memgraph. Same HTTP contract.
