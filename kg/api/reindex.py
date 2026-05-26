@@ -6,6 +6,9 @@ from fastapi import APIRouter, HTTPException
 from ..db import session
 from ..extractors import gql as gql_extractor
 from ..extractors import routes as routes_extractor
+from ..extractors import permissions as permissions_extractor
+from ..extractors import pages as pages_extractor
+from ..extractors import docs as docs_extractor
 from ..settings import settings
 
 
@@ -55,9 +58,12 @@ async def reindex(project: str | None = None) -> dict:
             )
             stats.raise_for_status()
 
-            # 3) extractors (gql first — routes depends on known gql symbols)
+            # 3) extractors (order matters: gql → routes → permissions/pages/docs)
             gql_result = await gql_extractor.run_for_project(proj.name)
             routes_result = await routes_extractor.run_for_project(proj.name)
+            permissions_result = await permissions_extractor.run_for_project(proj.name)
+            pages_result = await pages_extractor.run_for_project(proj.name)
+            docs_result = await docs_extractor.run_for_project(proj.name)
 
             results.append(
                 {
@@ -65,6 +71,9 @@ async def reindex(project: str | None = None) -> dict:
                     "stats": stats.json(),
                     "gql": gql_result,
                     "routes": routes_result,
+                    "permissions": permissions_result,
+                    "pages": pages_result,
+                    "docs": docs_result,
                 }
             )
 

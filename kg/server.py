@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import gql, health, reindex, routes_api
+from .api import gql, health, reindex, routes_api, docs, permissions_api, pages_api
 from .db import close_driver, init_schema
 from .settings import settings
 
@@ -27,6 +27,9 @@ app.include_router(health.router, tags=["meta"])
 app.include_router(reindex.router, tags=["ingest"])
 app.include_router(gql.router)
 app.include_router(routes_api.router)
+app.include_router(docs.router)
+app.include_router(permissions_api.router)
+app.include_router(pages_api.router)
 
 
 def main() -> None:
