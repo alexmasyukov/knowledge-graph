@@ -1,35 +1,17 @@
-"""Pages filesystem-convention extractor.
-
-ADSW convention:
-    src/pages/<domain>/<entity>/
-        Entity.tsx       — form/detail
-        Entities.tsx     — table/list
-        types.ts
-        helpers.ts
-        constants.ts
-        csvReport.ts     — optional
-        toast-contracts.ts — optional
-        Form/, hooks/    — sub-folders
-
-Some pages skip the entity layer (e.g. home/Home.tsx).
-
-Schema:
-    (:Domain  {project, name})
-    (:Page    {project, domain, entity, dir})
-    (:Page)-[:IN_DOMAIN]->(:Domain)
-    (:Page)-[:HAS_FILE]->(:File)
-    (:Component)-[:BELONGS_TO]->(:Page)
-"""
+"""Pages filesystem-convention extractor."""
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
-from ..db import session
+from ..db import session, wipe_labels
 from ..settings import settings
 
 
-# Files we classify by role
+NAME = "pages"
+LABELS = ("Page", "Domain")
+
+
 ROLE_BY_FILENAME = {
     "types.ts": "types",
     "helpers.ts": "helpers",
@@ -41,17 +23,11 @@ ROLE_BY_FILENAME = {
 IGNORED_DIRS = {"node_modules", "__tests__", "__mocks__", ".DS_Store"}
 
 
-def _project_root(project: str) -> Path | None:
-    cfg = next((p for p in settings.projects if p.name == project), None)
-    return cfg.root if cfg else None
-
-
 def _is_pascal(name: str) -> bool:
     return bool(name) and name[0].isupper()
 
 
 def _scan_page_dir(d: Path, root: Path) -> dict[str, Any]:
-    """Returns the file inventory of a page directory."""
     files = {"components": [], "by_role": {}, "subdirs": []}
     for p in d.iterdir():
         if p.name.startswith(".") or p.name in IGNORED_DIRS:
@@ -68,10 +44,10 @@ def _scan_page_dir(d: Path, root: Path) -> dict[str, Any]:
 
 
 def _collect_pages(project: str) -> tuple[list[dict[str, Any]], list[str]]:
-    root = _project_root(project)
-    if root is None:
+    cfg = settings.project(project)
+    if cfg is None:
         return [], []
-
+    root = cfg.code_root
     pages_root = root / "src" / "pages"
     if not pages_root.is_dir():
         return [], []
@@ -81,7 +57,6 @@ def _collect_pages(project: str) -> tuple[list[dict[str, Any]], list[str]]:
 
     for domain_dir in sorted(pages_root.iterdir()):
         if not domain_dir.is_dir():
-            # e.g. Page404.tsx at root — treat as a standalone page
             if domain_dir.suffix in (".tsx", ".jsx") and _is_pascal(domain_dir.stem):
                 pages.append(
                     {
@@ -99,17 +74,10 @@ def _collect_pages(project: str) -> tuple[list[dict[str, Any]], list[str]]:
             continue
 
         domain = domain_dir.name
-        # Is this a flat domain (only PascalCase .tsx files, no entity folders)?
         sub_entries = [p for p in domain_dir.iterdir() if not p.name.startswith(".")]
-        has_entity_subdirs = any(
-            p.is_dir() and p.name not in {"common", "components", "hooks", "contexts", "constants"}
-            and _is_pascal(p.name) is False  # entity folders are camelCase, not PascalCase
-            for p in sub_entries
-        )
 
         flat_files = _scan_page_dir(domain_dir, root)
         if flat_files["components"] or flat_files["by_role"]:
-            # Flat domain page (e.g. home/Home.tsx)
             pages.append(
                 {
                     "domain": domain,
@@ -120,12 +88,10 @@ def _collect_pages(project: str) -> tuple[list[dict[str, Any]], list[str]]:
             )
             domains.add(domain)
 
-        # Walk entity sub-dirs
         for entity_dir in sorted(sub_entries):
             if not entity_dir.is_dir():
                 continue
             if entity_dir.name in {"common", "components", "hooks", "contexts", "constants"}:
-                # shared utilities for the domain — not a page
                 continue
             inv = _scan_page_dir(entity_dir, root)
             if not inv["components"] and not inv["by_role"]:
@@ -143,17 +109,10 @@ def _collect_pages(project: str) -> tuple[list[dict[str, Any]], list[str]]:
     return pages, sorted(domains)
 
 
-def write_pages(project: str, pages: list[dict[str, Any]], domains: list[str]) -> dict[str, int]:
-    with session() as s:
-        s.run(
-            """
-            MATCH (n {project: $project})
-            WHERE n:Page OR n:Domain
-            DETACH DELETE n
-            """,
-            project=project,
-        )
+def _write(project: str, pages: list[dict[str, Any]], domains: list[str]) -> dict[str, int]:
+    wipe_labels(project, list(LABELS))
 
+    with session() as s:
         if domains:
             s.run(
                 """
@@ -191,14 +150,13 @@ def write_pages(project: str, pages: list[dict[str, Any]], domains: list[str]) -
                         "entity": pg["entity"],
                         "dir": pg["dir"],
                         "flat_files": [c["file"] for c in pg["components"]]
-                                       + list(pg["by_role"].values()),
+                                      + list(pg["by_role"].values()),
                         "subdirs": pg["subdirs"],
                     }
                     for pg in pages
                 ],
             )
 
-        # Component → Page links (Component nodes were created in Phase 2)
         comp_to_page = []
         for pg in pages:
             for c in pg["components"]:
@@ -217,7 +175,6 @@ def write_pages(project: str, pages: list[dict[str, Any]], domains: list[str]) -
                 items=comp_to_page,
             )
 
-        # File nodes for each page file
         file_links = []
         for pg in pages:
             for c in pg["components"]:
@@ -241,13 +198,10 @@ def write_pages(project: str, pages: list[dict[str, Any]], domains: list[str]) -
                 items=file_links,
             )
 
-    return {
-        "pages": len(pages),
-        "domains": len(domains),
-    }
+    return {"pages": len(pages), "domains": len(domains)}
 
 
-async def run_for_project(project: str) -> dict[str, Any]:
+async def run(project: str) -> dict[str, Any]:
     pages, domains = _collect_pages(project)
-    counts = write_pages(project, pages, domains)
-    return {"project": project, "written": counts, "domains": domains}
+    counts = _write(project, pages, domains)
+    return {"written": counts, "domains": domains}

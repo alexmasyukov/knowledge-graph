@@ -11,9 +11,43 @@ from pydantic import BaseModel
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
+# Only true repo-root markers. package.json / pyproject.toml live at
+# every package and would falsely "anchor" the search inside a monorepo
+# sub-package — they are NOT in this list.
+_REPO_MARKERS = (".git", "pnpm-workspace.yaml", "lerna.json", "nx.json", "rush.json", "turbo.json")
+
+
+def _walk_up_for_marker(start: Path) -> Path | None:
+    """Walk parents looking for the repository root.
+
+    We start from start.parent (so a package-level marker doesn't trap us)
+    and walk up until we find .git or a workspace marker.
+    """
+    for c in start.parents:
+        if any((c / m).exists() for m in _REPO_MARKERS):
+            return c
+    return None
+
+
 class ProjectConfig(BaseModel):
     name: str
     root: Path
+
+    @property
+    def code_root(self) -> Path:
+        """The source root configured via PROJECT_<NAME>=…
+        Typically points at packages/<x>/ inside a monorepo."""
+        return self.root
+
+    @property
+    def repo_root(self) -> Path:
+        """The repository root — first ancestor with .git or a workspace
+        marker; falls back to two levels up from code_root."""
+        marker = _walk_up_for_marker(self.root)
+        if marker is not None:
+            return marker
+        # last-ditch fallback: ../..
+        return self.root.parent.parent
 
 
 class Settings(BaseModel):
@@ -24,6 +58,9 @@ class Settings(BaseModel):
     api_host: str
     api_port: int
     projects: list[ProjectConfig]
+
+    def project(self, name: str) -> ProjectConfig | None:
+        return next((p for p in self.projects if p.name == name), None)
 
     @classmethod
     def load(cls) -> "Settings":

@@ -1,61 +1,32 @@
-"""GraphQL extractor: orchestrates the Node indexer and writes nodes/edges to Neo4j.
-
-Schema produced:
-    (:Project {name})
-    (:GqlOperation {project, symbol, gql_name, kind, file, line, exported})
-    (:GqlHook {project, name, file, line})
-    (:File {project, path})
-
-    (GqlOperation)-[:IN_PROJECT]->(Project)
-    (GqlHook)-[:IN_PROJECT]->(Project)
-    (GqlHook)-[:WRAPS]->(GqlOperation)             # via known operation symbols in hook body
-    (File)-[:USES_OPERATION {line, column}]->(GqlOperation)
-    (File)-[:CALLS_HOOK {line, column}]->(GqlHook)
-"""
+"""GraphQL extractor: gql operations + hooks + callsites."""
 from __future__ import annotations
 
 from typing import Any
 
-import httpx
-
-from ..db import session
-from ..settings import settings
+from ..db import session, wipe_labels
+from ..http import client
 
 
-async def fetch_gql_extract(project: str) -> dict[str, Any]:
-    """Calls the ts-morph indexer to extract gql operations/hooks/callsites."""
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        r = await client.post(
-            f"{settings.indexer_url}/extract/gql",
-            json={"project": project},
-        )
-        r.raise_for_status()
-        return r.json()
+NAME = "gql"
+LABELS = ("GqlOperation", "GqlHook")
 
 
-def write_gql_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
-    """Persists the extract into Neo4j. Idempotent — replaces existing gql nodes/edges for the project."""
+async def _fetch(project: str) -> dict[str, Any]:
+    r = await client().post("/extract/gql", json={"project": project})
+    r.raise_for_status()
+    return r.json()
+
+
+def _write(project: str, payload: dict[str, Any]) -> dict[str, int]:
     operations = payload.get("operations", [])
     hooks = payload.get("hooks", [])
     callsites = payload.get("callsites", [])
-
     op_callsites = [c for c in callsites if c.get("targetKind") == "operation"]
     hook_callsites = [c for c in callsites if c.get("targetKind") == "hook"]
 
-    with session() as s:
-        # 1) wipe previous gql nodes for the project (relationships go with DETACH)
-        s.run(
-            """
-            MATCH (n {project: $project})
-            WHERE n:GqlOperation OR n:GqlHook
-            DETACH DELETE n
-            """,
-            project=project,
-        )
-        # File nodes are kept — they may have edges from other extractors.
-        # Old USES_OPERATION/CALLS_HOOK edges have already been removed via DETACH.
+    wipe_labels(project, list(LABELS))
 
-        # 2) operations
+    with session() as s:
         s.run(
             """
             MATCH (p:Project {name: $project})
@@ -75,7 +46,6 @@ def write_gql_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
             ops=operations,
         )
 
-        # 3) hooks + WRAPS edges
         s.run(
             """
             MATCH (p:Project {name: $project})
@@ -96,7 +66,6 @@ def write_gql_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
             hooks=hooks,
         )
 
-        # 4) callsites → operations
         if op_callsites:
             s.run(
                 """
@@ -110,7 +79,6 @@ def write_gql_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
                 cs=op_callsites,
             )
 
-        # 5) callsites → hooks
         if hook_callsites:
             s.run(
                 """
@@ -131,11 +99,7 @@ def write_gql_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
     }
 
 
-async def run_for_project(project: str) -> dict[str, Any]:
-    payload = await fetch_gql_extract(project)
-    counts = write_gql_extract(project, payload)
-    return {
-        "project": project,
-        "stats": payload.get("stats", {}),
-        "written": counts,
-    }
+async def run(project: str) -> dict[str, Any]:
+    payload = await _fetch(project)
+    counts = _write(project, payload)
+    return {"stats": payload.get("stats", {}), "written": counts}

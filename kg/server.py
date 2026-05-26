@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from .api import gql, health, reindex, routes_api, docs, permissions_api, pages_api, e2e_api, scss_api
 from .db import close_driver, init_schema
+from .http import close as close_http
 from .settings import settings
 
 
@@ -13,6 +14,7 @@ from .settings import settings
 async def lifespan(app: FastAPI):
     init_schema()
     yield
+    await close_http()
     close_driver()
 
 

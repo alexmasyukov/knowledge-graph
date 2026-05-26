@@ -66,3 +66,22 @@ def init_schema() -> None:
         s.run("CREATE INDEX entity_kind IF NOT EXISTS FOR (n:Entity) ON (n.project, n.kind)")
         s.run("CREATE INDEX entity_name IF NOT EXISTS FOR (n:Entity) ON (n.project, n.name)")
         s.run("CREATE INDEX entity_file IF NOT EXISTS FOR (n:Entity) ON (n.project, n.file)")
+
+
+def wipe_labels(project: str, labels: list[str]) -> None:
+    """DETACH DELETE all nodes of the given labels belonging to a project.
+
+    Used by extractors at the start of write_*() for idempotency.
+    """
+    if not labels:
+        return
+    where = " OR ".join(f"n:{lbl}" for lbl in labels)
+    with session() as s:
+        s.run(
+            f"""
+            MATCH (n {{project: $project}})
+            WHERE {where}
+            DETACH DELETE n
+            """,
+            project=project,
+        )

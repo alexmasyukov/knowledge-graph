@@ -1,68 +1,52 @@
-"""Routes + Components + Guards + Permissions extractor.
-
-Schema:
-    (:Route       {project, path, index, depth, file, line})
-    (:Component   {project, name, file, line, exported})
-    (:Guard       {project, name})
-    (:Permission  {project, key})
-
-    (Route|Component|Guard|Permission)-[:IN_PROJECT]->(Project)
-    (Route)-[:CHILD_OF]->(Route)
-    (Route)-[:RENDERS]->(Component)
-    (Route)-[:GUARDED_BY]->(Guard)
-    (Route)-[:REQUIRES]->(Permission)
-    (Component)-[:CALLS_HOOK]->(GqlHook)
-    (Component)-[:USES_OPERATION]->(GqlOperation)
-"""
+"""Routes + Components + Guards + Permissions extractor."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
-import httpx
-
-from ..db import session
-from ..settings import settings
+from ..db import session, wipe_labels
+from ..http import client
 
 
-# Adsw router file relative to project root
-ROUTER_FILES_BY_PROJECT: dict[str, list[str]] = {
+NAME = "routes"
+LABELS = ("Route", "Component", "Guard", "Permission")
+
+
+# Per-project router files. Override via env: ROUTER_FILES_<NAME>="a,b,c"
+_DEFAULT_ROUTER_FILES: dict[str, list[str]] = {
     "adsw": ["src/router/index.tsx"],
     "network": ["src/router/index.tsx"],
 }
 
 
-async def fetch_routes_extract(project: str, known_hooks: list[str], known_operations: list[str]) -> dict[str, Any]:
-    files = ROUTER_FILES_BY_PROJECT.get(project, ["src/router/index.tsx"])
-    async with httpx.AsyncClient(timeout=300.0) as client:
-        r = await client.post(
-            f"{settings.indexer_url}/extract/routes",
-            json={
-                "project": project,
-                "routerFiles": files,
-                "knownHooks": known_hooks,
-                "knownOperations": known_operations,
-            },
-        )
-        r.raise_for_status()
-        return r.json()
+def _router_files(project: str) -> list[str]:
+    override = os.getenv(f"ROUTER_FILES_{project.upper()}")
+    if override:
+        return [s.strip() for s in override.split(",") if s.strip()]
+    return _DEFAULT_ROUTER_FILES.get(project, ["src/router/index.tsx"])
 
 
-def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int]:
+async def _fetch(project: str, known_hooks: list[str], known_operations: list[str]) -> dict[str, Any]:
+    r = await client().post(
+        "/extract/routes",
+        json={
+            "project": project,
+            "routerFiles": _router_files(project),
+            "knownHooks": known_hooks,
+            "knownOperations": known_operations,
+        },
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def _write(project: str, payload: dict[str, Any]) -> dict[str, int]:
     routes = payload.get("routes", [])
     components = payload.get("components", [])
 
-    with session() as s:
-        # 1) wipe previous nodes for this project
-        s.run(
-            """
-            MATCH (n {project: $project})
-            WHERE n:Route OR n:Component OR n:Guard OR n:Permission
-            DETACH DELETE n
-            """,
-            project=project,
-        )
+    wipe_labels(project, list(LABELS))
 
-        # 2) routes
+    with session() as s:
         s.run(
             """
             MATCH (p:Project {name: $project})
@@ -81,7 +65,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
             routes=routes,
         )
 
-        # 3) components
         s.run(
             """
             MATCH (p:Project {name: $project})
@@ -99,7 +82,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
             components=components,
         )
 
-        # 4) guards & permissions (deduplicated names/keys)
         guards = sorted({g for r in routes for g in r.get("guards", [])})
         permissions = sorted({p for r in routes for p in r.get("permissions", [])})
 
@@ -127,7 +109,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
                 keys=permissions,
             )
 
-        # 5) Route → Route (CHILD_OF), keyed by (path, depth, line)
         s.run(
             """
             UNWIND $routes AS r
@@ -140,7 +121,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
             routes=routes,
         )
 
-        # 6) Route → Component (RENDERS)
         route_render = [
             {"path": r["path"], "depth": r["depth"], "line": r["line"], "component": comp}
             for r in routes
@@ -150,15 +130,14 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
             s.run(
                 """
                 UNWIND $items AS i
-                MATCH (rt:Route      {project: $project, path: i.path, depth: i.depth, line: i.line})
-                MATCH (co:Component  {project: $project, name: i.component})
+                MATCH (rt:Route     {project: $project, path: i.path, depth: i.depth, line: i.line})
+                MATCH (co:Component {project: $project, name: i.component})
                 MERGE (rt)-[:RENDERS]->(co)
                 """,
                 project=project,
                 items=route_render,
             )
 
-        # 7) Route → Guard
         route_guard = [
             {"path": r["path"], "depth": r["depth"], "line": r["line"], "guard": g}
             for r in routes
@@ -176,7 +155,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
                 items=route_guard,
             )
 
-        # 8) Route → Permission
         route_perm = [
             {"path": r["path"], "depth": r["depth"], "line": r["line"], "key": k}
             for r in routes
@@ -194,7 +172,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
                 items=route_perm,
             )
 
-        # 9) Component → GqlHook (CALLS_HOOK)
         comp_hook = [
             {"name": c["name"], "hook": h}
             for c in components
@@ -212,7 +189,6 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
                 items=comp_hook,
             )
 
-        # 10) Component → GqlOperation (USES_OPERATION)
         comp_op = [
             {"name": c["name"], "symbol": s_}
             for c in components
@@ -222,7 +198,7 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
             s.run(
                 """
                 UNWIND $items AS i
-                MATCH (co:Component   {project: $project, name: i.name})
+                MATCH (co:Component    {project: $project, name: i.name})
                 MATCH (op:GqlOperation {project: $project, symbol: i.symbol})
                 MERGE (co)-[:USES_OPERATION]->(op)
                 """,
@@ -238,12 +214,17 @@ def write_routes_extract(project: str, payload: dict[str, Any]) -> dict[str, int
     }
 
 
-async def run_for_project(project: str) -> dict[str, Any]:
-    # Fetch known hooks and operations from existing graph (Phase 1 must have run)
+async def run(project: str) -> dict[str, Any]:
     with session() as s:
-        hooks = [r["name"] for r in s.run("MATCH (h:GqlHook {project: $project}) RETURN h.name AS name", project=project).data()]
-        ops = [r["symbol"] for r in s.run("MATCH (o:GqlOperation {project: $project}) RETURN DISTINCT o.symbol AS symbol", project=project).data()]
+        hooks = [r["name"] for r in s.run(
+            "MATCH (h:GqlHook {project: $project}) RETURN h.name AS name",
+            project=project,
+        ).data()]
+        ops = [r["symbol"] for r in s.run(
+            "MATCH (o:GqlOperation {project: $project}) RETURN DISTINCT o.symbol AS symbol",
+            project=project,
+        ).data()]
 
-    payload = await fetch_routes_extract(project, hooks, ops)
-    counts = write_routes_extract(project, payload)
-    return {"project": project, "stats": payload.get("stats", {}), "written": counts}
+    payload = await _fetch(project, hooks, ops)
+    counts = _write(project, payload)
+    return {"stats": payload.get("stats", {}), "written": counts}
