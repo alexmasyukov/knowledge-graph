@@ -22,10 +22,45 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from functools import lru_cache
+from pathlib import Path
 from typing import Final
 
 from .base import Extractor, IndexerContext, IngestResult
 from .scip_loader import SymbolInfo, parse_symbol_path, short_symbol
+
+# Matches `gql\`\n  query GetX(...) {...\``  — captures kind + gql name.
+# Also handles `gql\` query GetX { ... \`` on one line. Multiline mode
+# so `^` anchors to the start of each line inside the template.
+_GQL_TAG_RX = re.compile(
+    r"gql\s*`\s*(?P<kind>query|mutation|subscription|fragment)\s+(?P<name>\w+)",
+    re.IGNORECASE,
+)
+
+
+@lru_cache(maxsize=2048)
+def _gql_info_for_file(file_path: str) -> dict[str, tuple[str, str]]:
+    """Map {ts_local_name → (kind, gql_name)} for every gql tagged
+    template in a TS source file.
+
+    A file like:
+        export const GET_X = gql`query GetX { ... }`
+        export const ADD_Y = gql`mutation AddY($i: ...) { ... }`
+    yields {"GET_X": ("query", "GetX"), "ADD_Y": ("mutation", "AddY")}.
+    """
+    out: dict[str, tuple[str, str]] = {}
+    try:
+        text = Path(file_path).read_text(encoding="utf-8")
+    except Exception:
+        return out
+    # Find every `<ws>const <NAME> = gql\`<kind> <gql_name>` pair.
+    pattern = re.compile(
+        r"(?:export\s+)?const\s+(?P<ts>[A-Z][A-Z0-9_]*)\s*=\s*gql\s*`\s*(?P<kind>query|mutation|subscription|fragment)\s+(?P<gql>\w+)",
+        re.IGNORECASE,
+    )
+    for m in pattern.finditer(text):
+        out[m["ts"]] = (m["kind"].lower(), m["gql"])
+    return out
 
 # Prefix of the package-relative file path that gates each kind.
 # scip-typescript emits paths relative to the package root, not the
@@ -80,6 +115,15 @@ class GqlExtractor:
                 "callsites": len(info.references),
             }
             if _is_operation(pkg_file, name):
+                # Pull kind + gql_name out of the source file so consumers
+                # know whether this is a query/mutation/etc and what its
+                # GraphQL-side identifier is. scip-typescript emits paths
+                # relative to the indexed *package* (code_root), not the
+                # workspace root.
+                abs_path = ctx.project.code_root / d.file
+                gql_info = _gql_info_for_file(str(abs_path)).get(name)
+                if gql_info:
+                    row["kind"], row["gql_name"] = gql_info
                 operations.append(row)
                 symbol_to_node[info.symbol] = ("GqlOperation", row)
                 files_seen.add(d.file)
