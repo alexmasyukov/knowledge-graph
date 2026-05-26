@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import docs, e2e, gql, health, pages, permissions, reindex, routes, scss
+from .api import docs, e2e, errors, gql, health, pages, permissions, reindex, routes, scss
 from .db import close_driver, init_schema
 from .http import close as close_http
 from .logger import setup as setup_logging
@@ -26,6 +26,7 @@ app = FastAPI(
     description="Code intelligence knowledge graph",
     lifespan=lifespan,
 )
+errors.install(app)
 
 app.include_router(health.router, tags=["meta"])
 app.include_router(reindex.router, tags=["ingest"])
