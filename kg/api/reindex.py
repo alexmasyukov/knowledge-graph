@@ -4,6 +4,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 
 from ..db import session
+from ..extractors import gql as gql_extractor
 from ..settings import settings
 
 
@@ -12,8 +13,13 @@ router = APIRouter()
 
 @router.post("/reindex")
 async def reindex(project: str | None = None) -> dict:
-    """Phase 0 stub: registers each configured project in Neo4j and ts-morph indexer.
-    Phase 1+ will plug in actual extractors."""
+    """Reindex one or all configured projects.
+
+    Pipeline:
+      1) MERGE Project node in Neo4j
+      2) Register project in ts-morph indexer (loads SourceFiles into memory)
+      3) Run extractors (Phase 1: gql)
+    """
     targets = (
         [p for p in settings.projects if p.name == project]
         if project
@@ -40,14 +46,23 @@ async def reindex(project: str | None = None) -> dict:
                 json={"name": proj.name, "root": str(proj.root)},
             )
             r.raise_for_status()
-            payload = r.json()
+            register = r.json()
 
-            # 3) fetch stats
             stats = await client.get(
                 f"{settings.indexer_url}/projects/stats",
                 params={"project": proj.name},
             )
             stats.raise_for_status()
-            results.append({"register": payload, "stats": stats.json()})
+
+            # 3) extractors
+            gql_result = await gql_extractor.run_for_project(proj.name)
+
+            results.append(
+                {
+                    "register": register,
+                    "stats": stats.json(),
+                    "gql": gql_result,
+                }
+            )
 
     return {"ok": True, "results": results}

@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
 import { ProjectRegistry } from './project.js'
+import { extractGql } from './extractors/gql.js'
 
 const PORT = Number(process.env.INDEXER_PORT ?? 7401)
 const HOST = process.env.INDEXER_HOST ?? '127.0.0.1'
@@ -27,6 +28,12 @@ app.get<{ Querystring: { project: string } }>('/projects/stats', async (req) => 
     root: proj.root,
     sourceFiles: proj.tsProject.getSourceFiles().length,
   }
+})
+
+app.post<{ Body: { project: string } }>('/extract/gql', async (req) => {
+  const { project } = req.body
+  const proj = registry.get(project)
+  return extractGql(proj)
 })
 
 app.listen({ port: PORT, host: HOST })
