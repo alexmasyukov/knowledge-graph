@@ -202,6 +202,50 @@ async def coverage(project: str) -> dict:
     return {"project": project, **data}
 
 
+@router.get("/uncovered")
+async def uncovered_testids(
+    project: str,
+    limit: int = Query(default=200, ge=1, le=2000),
+    group_by_file: bool = Query(default=True),
+) -> dict:
+    """Adsw testids that no locator hits — either directly or via a pattern.
+
+    With group_by_file=True (default) the result is bucketed by source
+    file and sorted by descending uncovered-count, which is how e2e
+    planners tend to look at it ('this form has 12 untestable inputs').
+    Toggle off to get a flat list."""
+    cypher = """
+        MATCH (t:TestId {project: $project})
+        MATCH (f:File)-[h:HAS_TESTID]->(t)
+        OPTIONAL MATCH (l_lit:TestIdLoc)-[:RESOLVES_TO]->(t)
+        OPTIONAL MATCH (l_pat:TestIdLoc {project: $project})
+          WHERE t.pattern = true AND size(t.value) > 0
+            AND l_pat.value STARTS WITH t.value
+        WITH t, f, h, count(DISTINCT l_lit) + count(DISTINCT l_pat) AS in_loc
+        WHERE in_loc = 0
+        RETURN t.value AS value, t.pattern AS pattern,
+               f.path AS file, h.line AS line
+        ORDER BY f.path, h.line
+        LIMIT $limit
+    """
+    with session() as s_:
+        rows = s_.run(cypher, project=project, limit=limit).data()
+
+    if not group_by_file:
+        return {"project": project, "count": len(rows), "uncovered": rows}
+
+    by_file: dict[str, list[dict]] = {}
+    for r in rows:
+        by_file.setdefault(r["file"], []).append(
+            {"value": r["value"], "line": r["line"], "pattern": r["pattern"]}
+        )
+    groups = sorted(
+        ({"file": f, "count": len(items), "testids": items} for f, items in by_file.items()),
+        key=lambda g: (-g["count"], g["file"]),
+    )
+    return {"project": project, "files": len(groups), "total": len(rows), "groups": groups}
+
+
 @router.get("/testid-search", response_model=TestIdSearchResponse)
 async def testid_search(
     project: str,
