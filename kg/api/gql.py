@@ -42,6 +42,10 @@ async def list_operations(
 
 @router.get("/hooks/{name}", response_model=GqlHookInfoResponse)
 async def hook_info(name: str, project: str) -> dict:
+    # Hook name is NOT unique — legacy and new-convention hooks can
+    # coexist (e.g. src/gql/hooks/useCourses.ts vs
+    # src/gql/hooks/education/courses/useCourses.ts). Return every
+    # definition so the caller can see the duplication.
     cypher = """
         MATCH (h:GqlHook {project: $project, name: $name})
         OPTIONAL MATCH (h)-[:WRAPS]->(o:GqlOperation)
@@ -50,15 +54,32 @@ async def hook_info(name: str, project: str) -> dict:
              collect(DISTINCT {symbol: o.symbol, gql_name: o.gql_name, kind: o.kind}) AS operations,
              collect(DISTINCT {file: f.path, line: c.line, column: c.column}) AS callers
         RETURN
-          {file: h.file, line: h.line} AS location,
+          h.file AS file, h.line AS line,
           [op IN operations WHERE op.symbol IS NOT NULL] AS operations,
           [c IN callers WHERE c.file IS NOT NULL] AS callers
+        ORDER BY h.file
     """
     with session() as s:
-        rec = s.run(cypher, project=project, name=name).single()
-    if not rec or rec["location"] is None:
+        rows = s.run(cypher, project=project, name=name).data()
+    if not rows:
         raise HTTPException(404, f"hook not found: {name} in project {project}")
-    return {"project": project, "name": name, **rec.data()}
+    defs = [
+        {
+            "location": {"file": r["file"], "line": r["line"]},
+            "operations": r["operations"],
+            "callers": r["callers"],
+        }
+        for r in rows
+    ]
+    first = defs[0]
+    return {
+        "project": project,
+        "name": name,
+        "definitions": defs,
+        "location": first["location"],
+        "operations": first["operations"],
+        "callers": first["callers"],
+    }
 
 
 @router.get("/callsites", response_model=GqlCallsitesResponse)

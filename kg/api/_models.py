@@ -55,10 +55,22 @@ class GqlCaller(BaseModel):
     column: int
 
 
+class GqlHookDefinition(BaseModel):
+    location: Location
+    operations: list[GqlHookOperationBrief] = Field(default_factory=list)
+    callers: list[GqlCaller] = Field(default_factory=list)
+
+
 class GqlHookInfoResponse(BaseModel):
     project: str
     name: str
-    location: Location
+    # When a hook name has multiple definitions (e.g. legacy + new
+    # convention coexisting), all of them are returned here. The flat
+    # `location` / `operations` / `callers` fields point to the first
+    # definition for backwards compatibility — read `definitions` if
+    # you need the full picture.
+    definitions: list[GqlHookDefinition] = Field(default_factory=list)
+    location: Location | None = None
     operations: list[GqlHookOperationBrief] = Field(default_factory=list)
     callers: list[GqlCaller] = Field(default_factory=list)
 
