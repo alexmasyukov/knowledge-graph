@@ -1,4 +1,5 @@
 """E2E endpoints (Phase 4)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
@@ -10,7 +11,6 @@ from ._models import (
     TestIdInfoResponse,
     TestIdSearchResponse,
 )
-
 
 router = APIRouter(prefix="/e2e", tags=["e2e"])
 

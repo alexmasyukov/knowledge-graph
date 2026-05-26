@@ -1,4 +1,5 @@
 """Read-only GraphQL graph endpoints (Phase 1)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
@@ -10,7 +11,6 @@ from ._models import (
     GqlListResponse,
 )
 
-
 router = APIRouter(prefix="/gql", tags=["gql"])
 
 
@@ -18,7 +18,9 @@ router = APIRouter(prefix="/gql", tags=["gql"])
 async def list_operations(
     project: str,
     kind: str | None = Query(default=None, description="query|mutation|subscription|fragment"),
-    name_substr: str | None = Query(default=None, description="filter by case-insensitive substring of symbol or gql_name"),
+    name_substr: str | None = Query(
+        default=None, description="filter by case-insensitive substring of symbol or gql_name"
+    ),
     limit: int = Query(default=500, ge=1, le=5000),
 ) -> dict:
     cypher = """

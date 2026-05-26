@@ -9,7 +9,6 @@ import typer
 
 from .settings import settings
 
-
 app = typer.Typer(no_args_is_help=True, help="knowledge-graph control CLI")
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -69,7 +68,7 @@ def status() -> None:
         typer.echo(r.text)
     except Exception as e:
         typer.echo(f"core down: {e}", err=True)
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()

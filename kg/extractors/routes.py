@@ -1,4 +1,5 @@
 """Routes + Components + Guards + Permissions extractor."""
+
 from __future__ import annotations
 
 import os
@@ -6,7 +7,6 @@ from typing import Any
 
 from ..db import session, wipe_labels
 from ..http import client
-
 
 NAME = "routes"
 LABELS = ("Route", "Component", "Guard", "Permission")
@@ -172,11 +172,7 @@ def _write(project: str, payload: dict[str, Any]) -> dict[str, int]:
                 items=route_perm,
             )
 
-        comp_hook = [
-            {"name": c["name"], "hook": h}
-            for c in components
-            for h in c.get("hookCalls", [])
-        ]
+        comp_hook = [{"name": c["name"], "hook": h} for c in components for h in c.get("hookCalls", [])]
         if comp_hook:
             s.run(
                 """
@@ -189,11 +185,7 @@ def _write(project: str, payload: dict[str, Any]) -> dict[str, int]:
                 items=comp_hook,
             )
 
-        comp_op = [
-            {"name": c["name"], "symbol": s_}
-            for c in components
-            for s_ in c.get("operationRefs", [])
-        ]
+        comp_op = [{"name": c["name"], "symbol": s_} for c in components for s_ in c.get("operationRefs", [])]
         if comp_op:
             s.run(
                 """
@@ -216,14 +208,20 @@ def _write(project: str, payload: dict[str, Any]) -> dict[str, int]:
 
 async def run(project: str) -> dict[str, Any]:
     with session() as s:
-        hooks = [r["name"] for r in s.run(
-            "MATCH (h:GqlHook {project: $project}) RETURN h.name AS name",
-            project=project,
-        ).data()]
-        ops = [r["symbol"] for r in s.run(
-            "MATCH (o:GqlOperation {project: $project}) RETURN DISTINCT o.symbol AS symbol",
-            project=project,
-        ).data()]
+        hooks = [
+            r["name"]
+            for r in s.run(
+                "MATCH (h:GqlHook {project: $project}) RETURN h.name AS name",
+                project=project,
+            ).data()
+        ]
+        ops = [
+            r["symbol"]
+            for r in s.run(
+                "MATCH (o:GqlOperation {project: $project}) RETURN DISTINCT o.symbol AS symbol",
+                project=project,
+            ).data()
+        ]
 
     payload = await _fetch(project, hooks, ops)
     counts = _write(project, payload)

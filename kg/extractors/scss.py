@@ -1,4 +1,5 @@
 """SCSS modules extractor."""
+
 from __future__ import annotations
 
 import re
@@ -7,7 +8,6 @@ from typing import Any
 
 from ..db import session, wipe_labels
 from ..settings import settings
-
 
 NAME = "scss"
 LABELS = ("ScssModule",)
@@ -35,10 +35,12 @@ def _collect_modules(project_root: Path) -> list[dict[str, Any]]:
             text = p.read_text(encoding="utf-8")
         except Exception:
             continue
-        out.append({
-            "file": str(p.relative_to(project_root)),
-            "classes": _classes_in(text),
-        })
+        out.append(
+            {
+                "file": str(p.relative_to(project_root)),
+                "classes": _classes_in(text),
+            }
+        )
     return out
 
 
@@ -64,10 +66,12 @@ def _collect_imports(project_root: Path) -> list[dict[str, Any]]:
                     rel_target = target.relative_to(project_root)
                 except ValueError:
                     continue
-                out.append({
-                    "consumer": str(p.relative_to(project_root)),
-                    "module_file": str(rel_target),
-                })
+                out.append(
+                    {
+                        "consumer": str(p.relative_to(project_root)),
+                        "module_file": str(rel_target),
+                    }
+                )
     return out
 
 

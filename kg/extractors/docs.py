@@ -1,4 +1,5 @@
 """Project docs extractor (CLAUDE/ + root .md files)."""
+
 from __future__ import annotations
 
 import re
@@ -7,7 +8,6 @@ from typing import Any
 
 from ..db import session, wipe_labels
 from ..settings import settings
-
 
 NAME = "docs"
 LABELS = ("Doc",)
@@ -22,10 +22,7 @@ _HEADING_RX = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.MULTILINE)
 
 
 def _parse_md(text: str) -> dict[str, Any]:
-    headings = [
-        {"level": len(m.group(1)), "text": m.group(2)}
-        for m in _HEADING_RX.finditer(text)
-    ]
+    headings = [{"level": len(m.group(1)), "text": m.group(2)} for m in _HEADING_RX.finditer(text)]
     title = headings[0]["text"] if headings and headings[0]["level"] == 1 else None
     return {"title": title, "headings": headings}
 
@@ -51,13 +48,15 @@ def _collect_docs(project: str) -> list[dict[str, Any]]:
             except Exception:
                 continue
             meta = _parse_md(text)
-            out.append({
-                "name": p.stem,
-                "file": str(p.relative_to(root)),
-                "title": meta["title"],
-                "size": len(text),
-                "headings": meta["headings"],
-            })
+            out.append(
+                {
+                    "name": p.stem,
+                    "file": str(p.relative_to(root)),
+                    "title": meta["title"],
+                    "size": len(text),
+                    "headings": meta["headings"],
+                }
+            )
 
     for fname in ROOT_FILES:
         p = root / fname
@@ -68,13 +67,15 @@ def _collect_docs(project: str) -> list[dict[str, Any]]:
         except Exception:
             continue
         meta = _parse_md(text)
-        out.append({
-            "name": p.stem,
-            "file": str(p.relative_to(root)),
-            "title": meta["title"],
-            "size": len(text),
-            "headings": meta["headings"],
-        })
+        out.append(
+            {
+                "name": p.stem,
+                "file": str(p.relative_to(root)),
+                "title": meta["title"],
+                "size": len(text),
+                "headings": meta["headings"],
+            }
+        )
 
     return out
 
@@ -122,10 +123,7 @@ def _write(project: str, docs: list[dict[str, Any]]) -> dict[str, int]:
                 MERGE (doc)-[:IN_PROJECT]->(p)
                 """,
                 project=project,
-                docs=[
-                    {**d, "headings": [f"{h['level']}|{h['text']}" for h in d["headings"]]}
-                    for d in docs
-                ],
+                docs=[{**d, "headings": [f"{h['level']}|{h['text']}" for h in d["headings"]]} for d in docs],
             )
     return {"docs": len(docs)}
 

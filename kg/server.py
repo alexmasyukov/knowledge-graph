@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import gql, health, reindex, routes, docs, permissions, pages, e2e, scss
+from .api import docs, e2e, gql, health, pages, permissions, reindex, routes, scss
 from .db import close_driver, init_schema
 from .http import close as close_http
 from .logger import setup as setup_logging

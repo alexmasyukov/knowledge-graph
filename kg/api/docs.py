@@ -1,4 +1,5 @@
 """Docs endpoints (Phase 3)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
@@ -6,7 +7,6 @@ from fastapi import APIRouter, HTTPException, Query
 from ..db import session
 from ..extractors import docs as docs_extractor
 from ._models import DocGetResponse, DocsListResponse, DocsSearchResponse
-
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 

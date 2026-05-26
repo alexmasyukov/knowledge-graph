@@ -1,4 +1,5 @@
 """Status panel rendering + questionary styling."""
+
 from __future__ import annotations
 
 from questionary import Style
@@ -7,9 +8,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from .env import INDEXER_URL, CORE_URL, NEO4J_BROWSER, PROJECTS
-from .services import INDEXER, CORE, neo4j_state
-
+from .env import CORE_URL, INDEXER_URL, NEO4J_BROWSER, PROJECTS
+from .services import CORE, INDEXER, neo4j_state
 
 console = Console()
 
@@ -50,9 +50,13 @@ def render_status() -> Panel:
     table.add_column(justify="left", style="dim")
     table.add_column(justify="left", style="dim")
 
-    table.add_row("Neo4j",    _dot(neo) + Text(f" {neo:<9}"), NEO4J_BROWSER,        "browser")
-    table.add_row("Indexer",  _dot(idx_state) + Text(f" {idx_state:<9}"), INDEXER_URL, f"pid={INDEXER.pid() or '—'}")
-    table.add_row("Core API", _dot(core_state) + Text(f" {core_state:<9}"), CORE_URL,  f"pid={CORE.pid() or '—'}")
+    table.add_row("Neo4j", _dot(neo) + Text(f" {neo:<9}"), NEO4J_BROWSER, "browser")
+    table.add_row(
+        "Indexer", _dot(idx_state) + Text(f" {idx_state:<9}"), INDEXER_URL, f"pid={INDEXER.pid() or '—'}"
+    )
+    table.add_row(
+        "Core API", _dot(core_state) + Text(f" {core_state:<9}"), CORE_URL, f"pid={CORE.pid() or '—'}"
+    )
     table.add_row()
     table.add_row("Projects", Text(", ".join(PROJECTS) or "— none —", style="cyan"))
 

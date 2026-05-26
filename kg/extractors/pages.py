@@ -1,4 +1,5 @@
 """Pages filesystem-convention extractor."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,7 +7,6 @@ from typing import Any
 
 from ..db import session, wipe_labels
 from ..settings import settings
-
 
 NAME = "pages"
 LABELS = ("Page", "Domain")
@@ -149,8 +149,7 @@ def _write(project: str, pages: list[dict[str, Any]], domains: list[str]) -> dic
                         "domain": pg["domain"],
                         "entity": pg["entity"],
                         "dir": pg["dir"],
-                        "flat_files": [c["file"] for c in pg["components"]]
-                                      + list(pg["by_role"].values()),
+                        "flat_files": [c["file"] for c in pg["components"]] + list(pg["by_role"].values()),
                         "subdirs": pg["subdirs"],
                     }
                     for pg in pages
@@ -178,13 +177,9 @@ def _write(project: str, pages: list[dict[str, Any]], domains: list[str]) -> dic
         file_links = []
         for pg in pages:
             for c in pg["components"]:
-                file_links.append(
-                    {"path": c["file"], "domain": pg["domain"], "entity": pg["entity"] or ""}
-                )
-            for role, path in pg["by_role"].items():
-                file_links.append(
-                    {"path": path, "domain": pg["domain"], "entity": pg["entity"] or ""}
-                )
+                file_links.append({"path": c["file"], "domain": pg["domain"], "entity": pg["entity"] or ""})
+            for path in pg["by_role"].values():
+                file_links.append({"path": path, "domain": pg["domain"], "entity": pg["entity"] or ""})
         if file_links:
             s.run(
                 """

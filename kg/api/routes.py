@@ -1,4 +1,5 @@
 """Read-only routes graph endpoints (Phase 2)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
@@ -9,7 +10,6 @@ from ._models import (
     RouteResolveResponse,
     RoutesListResponse,
 )
-
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 

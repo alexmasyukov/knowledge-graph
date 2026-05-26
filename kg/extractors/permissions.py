@@ -1,11 +1,11 @@
 """Permissions source-of-truth extractor."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from ..db import session
 from ..http import client
-
 
 NAME = "permissions"
 # Permission nodes are owned both here and in routes (we MERGE, not wipe).

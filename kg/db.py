@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from neo4j import Driver, GraphDatabase, Session
 
 from .settings import settings
-
 
 _driver: Driver | None = None
 
@@ -53,10 +52,7 @@ def init_schema() -> None:
     """Idempotent schema setup: constraints and indexes."""
     with session() as s:
         # Unique project identity
-        s.run(
-            "CREATE CONSTRAINT project_name IF NOT EXISTS "
-            "FOR (p:Project) REQUIRE p.name IS UNIQUE"
-        )
+        s.run("CREATE CONSTRAINT project_name IF NOT EXISTS FOR (p:Project) REQUIRE p.name IS UNIQUE")
         # Generic node identity: (project, kind, qualified_name)
         s.run(
             "CREATE CONSTRAINT entity_qid IF NOT EXISTS "

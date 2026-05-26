@@ -9,8 +9,6 @@ from .. import extractors
 from ..db import session
 from ..http import client
 from ..settings import settings
-
-
 from ._models import ReindexResponse
 
 router = APIRouter()
@@ -26,11 +24,7 @@ async def reindex(project: str | None = None) -> dict:
       2) Register project in ts-morph indexer (loads SourceFiles into memory)
       3) Iterate extractors.ALL — each owns its labels and writes its slice
     """
-    targets = (
-        [p for p in settings.projects if p.name == project]
-        if project
-        else settings.projects
-    )
+    targets = [p for p in settings.projects if p.name == project] if project else settings.projects
     if not targets:
         raise HTTPException(404, f"project not configured: {project}")
 
@@ -42,8 +36,7 @@ async def reindex(project: str | None = None) -> dict:
 
         with session() as s:
             s.run(
-                "MERGE (p:Project {name: $name}) "
-                "SET p.root = $root, p.updated_at = datetime()",
+                "MERGE (p:Project {name: $name}) SET p.root = $root, p.updated_at = datetime()",
                 name=proj.name,
                 root=str(proj.code_root),
             )

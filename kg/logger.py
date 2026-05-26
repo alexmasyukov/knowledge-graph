@@ -6,6 +6,7 @@ extractor name visible.
 
 Call `setup()` once from the app's lifespan.
 """
+
 from __future__ import annotations
 
 import logging

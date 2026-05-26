@@ -6,6 +6,7 @@ via PID files so they survive between menu sessions.
 
     uv run python start.py
 """
+
 from __future__ import annotations
 
 import questionary
@@ -21,17 +22,16 @@ from kg.menu.actions import (
 )
 from kg.menu.ui import MENU_STYLE, console, show_status
 
-
 ACTIONS = [
-    ("Start all",                  start_all),
-    ("Stop all",                   stop_all),
-    ("Restart all",                restart_all),
-    ("Reindex project",            reindex),
-    ("Tail logs",                  tail_logs),
-    ("Open Neo4j Browser",         open_browser),
-    ("Open API docs (Swagger)",    open_api_docs),
-    ("Refresh status",             lambda: None),
-    ("Quit",                       None),
+    ("Start all", start_all),
+    ("Stop all", stop_all),
+    ("Restart all", restart_all),
+    ("Reindex project", reindex),
+    ("Tail logs", tail_logs),
+    ("Open Neo4j Browser", open_browser),
+    ("Open API docs (Swagger)", open_api_docs),
+    ("Refresh status", lambda: None),
+    ("Quit", None),
 ]
 
 

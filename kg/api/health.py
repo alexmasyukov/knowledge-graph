@@ -5,10 +5,7 @@ from fastapi import APIRouter
 
 from ..db import ping
 from ..settings import settings
-
-
 from ._models import HealthResponse
-
 
 router = APIRouter()
 

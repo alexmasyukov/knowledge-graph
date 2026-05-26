@@ -1,4 +1,5 @@
 """User-facing actions invoked from the main loop."""
+
 from __future__ import annotations
 
 import subprocess
@@ -8,9 +9,9 @@ import webbrowser
 import httpx
 import questionary
 
-from .env import PROJECTS, CORE_URL, NEO4J_BROWSER
-from .services import INDEXER, CORE, neo4j_state, neo4j_up, neo4j_down
-from .ui import console, MENU_STYLE
+from .env import CORE_URL, NEO4J_BROWSER, PROJECTS
+from .services import CORE, INDEXER, neo4j_down, neo4j_state, neo4j_up
+from .ui import MENU_STYLE, console
 
 
 def start_all() -> None:
@@ -27,12 +28,16 @@ def start_all() -> None:
     with console.status("[cyan]Starting indexer…", spinner="dots"):
         INDEXER.start()
         ok = INDEXER.wait_healthy(15)
-    console.print(f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] indexer {'ready' if ok else 'failed'} — see {INDEXER.log_file}")
+    console.print(
+        f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] indexer {'ready' if ok else 'failed'} — see {INDEXER.log_file}"
+    )
 
     with console.status("[cyan]Starting core API…", spinner="dots"):
         CORE.start()
         ok = CORE.wait_healthy(15)
-    console.print(f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] core {'ready' if ok else 'failed'} — see {CORE.log_file}")
+    console.print(
+        f"[{'green' if ok else 'red'}]{'✓' if ok else '✗'}[/] core {'ready' if ok else 'failed'} — see {CORE.log_file}"
+    )
 
 
 def stop_all() -> None:
@@ -60,7 +65,7 @@ def reindex() -> None:
     else:
         target = questionary.select(
             "Which project to reindex?",
-            choices=PROJECTS + ["(all)"],
+            choices=[*PROJECTS, "(all)"],
             style=MENU_STYLE,
         ).ask()
         if target is None:

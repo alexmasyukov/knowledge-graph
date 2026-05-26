@@ -1,11 +1,11 @@
 """GraphQL extractor: gql operations + hooks + callsites."""
+
 from __future__ import annotations
 
 from typing import Any
 
 from ..db import session, wipe_labels
 from ..http import client
-
 
 NAME = "gql"
 LABELS = ("GqlOperation", "GqlHook")

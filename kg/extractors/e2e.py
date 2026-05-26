@@ -4,6 +4,7 @@ Scans the Playwright e2e directory (e2e/tests/*.spec.ts and
 e2e/pages/*.{page,locators}.ts) plus app component sources for
 data-testid usage, then bridges the two via testid string values.
 """
+
 from __future__ import annotations
 
 import re
@@ -12,7 +13,6 @@ from typing import Any
 
 from ..db import session, wipe_labels
 from ..settings import settings
-
 
 NAME = "e2e"
 LABELS = ("E2eSpec", "PageObject", "TestIdLoc", "TestId")
@@ -27,9 +27,9 @@ _LOC_CONST_RX = re.compile(
     r"(?P<body>"
     r"(?:\([^)]*\)\s*=>\s*)?"
     r"(?:"
-        r"`(?:\\.|[^`])*`"
-        r"|'(?:\\.|[^'])*'"
-        r"|\"(?:\\.|[^\"])*\""
+    r"`(?:\\.|[^`])*`"
+    r"|'(?:\\.|[^'])*'"
+    r"|\"(?:\\.|[^\"])*\""
     r")"
     r")",
     re.DOTALL,
@@ -68,13 +68,15 @@ def _collect_specs(e2e_root: Path, project_root: Path) -> list[dict[str, Any]]:
         rel = str(p.relative_to(project_root))
         used_poms = _imported_pom_classes(text)
         for m in _TEST_CALL_RX.finditer(text):
-            specs.append({
-                "name": m.group("name"),
-                "file": rel,
-                "line": text.count("\n", 0, m.start()) + 1,
-                "kind": m.group("kind"),
-                "poms": used_poms,
-            })
+            specs.append(
+                {
+                    "name": m.group("name"),
+                    "file": rel,
+                    "line": text.count("\n", 0, m.start()) + 1,
+                    "kind": m.group("kind"),
+                    "poms": used_poms,
+                }
+            )
     return specs
 
 
@@ -128,15 +130,17 @@ def _collect_locators(e2e_root: Path, project_root: Path) -> list[dict[str, Any]
             line = text.count("\n", 0, m.start()) + 1
             value, parametric = _extract_locator_value(body)
             testids = _extract_testid_targets(body)
-            locators.append({
-                "module": p.stem.replace(".locators", ""),
-                "name": name,
-                "value": value,
-                "parametric": parametric,
-                "testids": testids,
-                "file": rel,
-                "line": line,
-            })
+            locators.append(
+                {
+                    "module": p.stem.replace(".locators", ""),
+                    "name": name,
+                    "value": value,
+                    "parametric": parametric,
+                    "testids": testids,
+                    "file": rel,
+                    "line": line,
+                }
+            )
     return locators
 
 
@@ -171,9 +175,7 @@ def _write(project: str, specs, page_objects, locators, testids) -> dict[str, in
         mod = Path(po["file"]).stem.replace(".page", "")
         pom_by_module.setdefault(mod, []).append(po["name"])
 
-    testid_values = sorted(
-        {t["value"] for t in testids} | {t for loc in locators for t in loc["testids"]}
-    )
+    testid_values = sorted({t["value"] for t in testids} | {t for loc in locators for t in loc["testids"]})
 
     wipe_labels(project, list(LABELS))
 

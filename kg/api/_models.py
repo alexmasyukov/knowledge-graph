@@ -7,14 +7,15 @@ Web UI). Endpoints declare them via `response_model=`.
 Optional fields use `None` defaults; collection fields default to empty
 lists so absent edges don't blow up MCP formatting code.
 """
+
 from __future__ import annotations
 
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 # ── shared ────────────────────────────────────────────────────────────
+
 
 class Location(BaseModel):
     file: str
@@ -85,6 +86,7 @@ class GqlCallsitesResponse(BaseModel):
 
 # ── routes ────────────────────────────────────────────────────────────
 
+
 class RouteRow(BaseModel):
     path: str
     index: bool
@@ -146,6 +148,7 @@ class ComponentRoutesResponse(BaseModel):
 
 # ── permissions ───────────────────────────────────────────────────────
 
+
 class PermissionRow(BaseModel):
     key: str
     roles: list[str] = Field(default_factory=list)
@@ -186,6 +189,7 @@ class RolesListResponse(BaseModel):
 
 
 # ── pages ─────────────────────────────────────────────────────────────
+
 
 class PageRow(BaseModel):
     domain: str
@@ -234,6 +238,7 @@ class DomainsListResponse(BaseModel):
 
 # ── docs ──────────────────────────────────────────────────────────────
 
+
 class DocRow(BaseModel):
     name: str
     file: str
@@ -270,6 +275,7 @@ class DocGetResponse(BaseModel):
 
 
 # ── e2e ───────────────────────────────────────────────────────────────
+
 
 class SpecRow(BaseModel):
     name: str
@@ -333,6 +339,7 @@ class TestIdSearchResponse(BaseModel):
 
 # ── scss ──────────────────────────────────────────────────────────────
 
+
 class ScssModuleRow(BaseModel):
     file: str
     classes: list[str] = Field(default_factory=list)
@@ -357,6 +364,7 @@ class ScssClassResponse(BaseModel):
 
 
 # ── meta ──────────────────────────────────────────────────────────────
+
 
 class HealthResponse(BaseModel):
     service: str = "kg-core"

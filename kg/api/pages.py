@@ -1,4 +1,5 @@
 """Pages endpoints (Phase 3)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
@@ -9,7 +10,6 @@ from ._models import (
     PageGetResponse,
     PagesListResponse,
 )
-
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 

@@ -1,11 +1,11 @@
 """SCSS endpoints (Phase 5)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
 from ._models import ScssClassResponse, ScssListResponse
-
 
 router = APIRouter(prefix="/scss", tags=["scss"])
 

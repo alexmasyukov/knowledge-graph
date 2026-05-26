@@ -1,10 +1,10 @@
 """Module-level shared httpx client for talking to the ts-morph indexer."""
+
 from __future__ import annotations
 
 import httpx
 
 from .settings import settings
-
 
 _client: httpx.AsyncClient | None = None
 

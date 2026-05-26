@@ -1,9 +1,9 @@
 """Shared environment derived from .env (no pydantic — keep startup light)."""
+
 from __future__ import annotations
 
 import os
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parent.parent.parent  # repo root
 
@@ -25,13 +25,7 @@ ENV = _load_env()
 INDEXER_URL = ENV.get("INDEXER_URL", "http://127.0.0.1:7401")
 CORE_URL = f"http://{ENV.get('API_HOST', '127.0.0.1')}:{ENV.get('API_PORT', '7400')}"
 NEO4J_BROWSER = "http://localhost:7474"
-PROJECTS = sorted(
-    {
-        k[len("PROJECT_"):].lower()
-        for k in ENV
-        if k.startswith("PROJECT_") and ENV[k].strip()
-    }
-)
+PROJECTS = sorted({k[len("PROJECT_") :].lower() for k in ENV if k.startswith("PROJECT_") and ENV[k].strip()})
 
 RUN_DIR = ROOT / ".run"
 LOG_DIR = ROOT / ".logs"

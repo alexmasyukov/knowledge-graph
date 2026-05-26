@@ -1,5 +1,6 @@
 """Local services managed by the control panel: Neo4j (Docker) + two
 long-running processes (indexer, core API) tracked via PID files."""
+
 from __future__ import annotations
 
 import os
@@ -10,7 +11,7 @@ from pathlib import Path
 
 import httpx
 
-from .env import ENV, ROOT, RUN_DIR, LOG_DIR, INDEXER_URL, CORE_URL, NEO4J_BROWSER
+from .env import CORE_URL, ENV, INDEXER_URL, LOG_DIR, NEO4J_BROWSER, ROOT, RUN_DIR
 
 
 class Service:
@@ -63,7 +64,9 @@ class Service:
     def start(self) -> None:
         if self.alive():
             return
-        log_fh = open(self.log_file, "ab", buffering=0)
+        # The subprocess keeps the file descriptor open for its lifetime —
+        # we deliberately don't use a context manager here.
+        log_fh = open(self.log_file, "ab", buffering=0)  # noqa: SIM115
         proc = subprocess.Popen(
             self.cmd,
             cwd=self.cwd,
@@ -112,9 +115,14 @@ INDEXER = Service(
 CORE = Service(
     "core",
     cmd=[
-        "uv", "run", "uvicorn", "kg.server:app",
-        "--host", ENV.get("API_HOST", "127.0.0.1"),
-        "--port", ENV.get("API_PORT", "7400"),
+        "uv",
+        "run",
+        "uvicorn",
+        "kg.server:app",
+        "--host",
+        ENV.get("API_HOST", "127.0.0.1"),
+        "--port",
+        ENV.get("API_PORT", "7400"),
     ],
     cwd=ROOT,
     url=CORE_URL,
@@ -123,16 +131,21 @@ CORE = Service(
 
 # ── Neo4j (Docker) ───────────────────────────────────────────────────
 
+
 def neo4j_state() -> str:
     """Returns 'running', 'starting', 'stopped' or 'unhealthy'."""
     try:
         r = subprocess.run(
             [
-                "docker", "inspect", "-f",
+                "docker",
+                "inspect",
+                "-f",
                 "{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}",
                 "kg-neo4j",
             ],
-            capture_output=True, text=True, timeout=3,
+            capture_output=True,
+            text=True,
+            timeout=3,
         )
         if r.returncode != 0:
             return "stopped"

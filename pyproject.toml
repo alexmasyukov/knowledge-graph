@@ -16,5 +16,35 @@ dependencies = [
   "python-dotenv>=1.0",
 ]
 
+[dependency-groups]
+dev = [
+  "ruff>=0.8",
+]
+
 [tool.uv]
 package = false
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = [".venv", "neo4j_data", "neo4j_logs", ".run", ".logs"]
+
+[tool.ruff.lint]
+# E: pycodestyle errors    F: pyflakes
+# I: isort                 UP: pyupgrade
+# B: bugbear               SIM: simplify
+# RUF: ruff-specific
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+  "E501",   # line-too-long (handled by formatter)
+  "B008",   # function call in default arg — FastAPI uses Query(...)
+  "SIM105", # try/except/pass — sometimes clearer than contextlib.suppress
+  "SIM108", # ternary suggestion — sometimes hurts readability
+  "SIM117", # combine nested `with` — splitting reads better with rich's context managers
+  "RUF001", # ambiguous unicode in strings — we use unicode glyphs in CLI/UI on purpose
+  "RUF002", # same, in docstrings
+]
+
+[tool.ruff.lint.per-file-ignores]
+"kg/extractors/__init__.py" = ["F401"]   # re-exports
+"kg/api/_models.py"        = ["UP007"]   # `X | None` is fine but pydantic prefers Optional for some cases

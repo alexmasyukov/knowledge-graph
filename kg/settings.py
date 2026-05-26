@@ -7,7 +7,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
@@ -63,7 +62,7 @@ class Settings(BaseModel):
         return next((p for p in self.projects if p.name == name), None)
 
     @classmethod
-    def load(cls) -> "Settings":
+    def load(cls) -> Settings:
         projects: list[ProjectConfig] = []
         for key, value in os.environ.items():
             m = re.fullmatch(r"PROJECT_([A-Z0-9_]+)", key)
