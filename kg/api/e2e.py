@@ -21,9 +21,14 @@ async def list_specs(
     name_substr: str | None = Query(default=None),
     limit: int = Query(default=500, ge=1, le=5000),
 ) -> dict:
+    # Match against both test title AND filename — Cyrillic test titles
+    # often don't share english slugs with the spec file (e.g. "бронь" vs
+    # create-update-booking.spec.ts), so filename matching is essential.
     cypher = """
         MATCH (s:E2eSpec {project: $project})
-        WHERE $q IS NULL OR toLower(s.name) CONTAINS toLower($q)
+        WHERE $q IS NULL
+           OR toLower(s.name) CONTAINS toLower($q)
+           OR toLower(s.file) CONTAINS toLower($q)
         OPTIONAL MATCH (s)-[:USES_POM]->(p:PageObject)
         WITH s, collect(DISTINCT p.name) AS poms
         RETURN s.name AS name, s.file AS file, s.line AS line, s.kind AS kind, poms
@@ -58,19 +63,29 @@ async def spec_info(project: str, file: str, line: int) -> dict:
 
 @router.get("/testid/{value:path}", response_model=TestIdInfoResponse)
 async def testid_info(value: str, project: str) -> dict:
+    # We union two sources of TestId nodes for the same requested value:
+    # the literal node (if any) and any pattern node whose static prefix
+    # matches. This way `sidebar-booking` shows BOTH the locator (literal
+    # node, created from `[data-testid="sidebar-booking"]`) AND the adsw
+    # source files of the pattern `sidebar-` it actually maps to.
     cypher = """
-        MATCH (t:TestId {project: $project, value: $value})
+        MATCH (t:TestId {project: $project})
+        WHERE (t.pattern = false AND t.value = $value)
+           OR (t.pattern = true  AND size(t.value) > 0 AND $value STARTS WITH t.value)
+        WITH collect(t) AS ts
+        WHERE size(ts) > 0
+        UNWIND ts AS t
         OPTIONAL MATCH (f:File)-[h:HAS_TESTID]->(t)
         OPTIONAL MATCH (l:TestIdLoc)-[:RESOLVES_TO]->(t)
         OPTIONAL MATCH (po:PageObject)-[:DEFINES_LOC]->(l)
         OPTIONAL MATCH (sp:E2eSpec)-[:USES_POM]->(po)
-        WITH t,
-             collect(DISTINCT {file: f.path, line: h.line}) AS adsw_sources,
-             collect(DISTINCT {name: l.name, file: l.file, line: l.line}) AS locators,
-             collect(DISTINCT po.name) AS page_objects,
-             collect(DISTINCT {name: sp.name, file: sp.file, line: sp.line}) AS specs
+        WITH
+          collect(DISTINCT {file: f.path, line: h.line}) AS adsw_sources,
+          collect(DISTINCT {name: l.name, file: l.file, line: l.line}) AS locators,
+          collect(DISTINCT po.name) AS page_objects,
+          collect(DISTINCT {name: sp.name, file: sp.file, line: sp.line}) AS specs
         RETURN
-          t.value AS value,
+          $value AS value,
           [s IN adsw_sources WHERE s.file IS NOT NULL] AS adsw_sources,
           [l IN locators     WHERE l.name IS NOT NULL] AS locators,
           [p IN page_objects WHERE p IS NOT NULL]     AS page_objects,
@@ -87,23 +102,53 @@ async def testid_info(value: str, project: str) -> dict:
 async def coverage(project: str) -> dict:
     """How many testids defined in adsw source are referenced by e2e locators.
 
+    A testid is considered covered if a locator references it directly
+    (literal) OR if it is a template pattern and at least one locator
+    value starts with its static prefix (e.g. `sidebar-` matches the
+    `sidebar-booking` locator).
+
     Only adsw-defined testids count toward the denominator; locator-only
-    values (referenced in e2e but not present in app code) are reported
-    separately."""
-    cypher = """
+    values (referenced in e2e but not present in app code as either a
+    literal or a matching pattern prefix) are reported separately."""
+    cypher_main = """
         MATCH (t:TestId {project: $project})
         OPTIONAL MATCH (f:File)-[:HAS_TESTID]->(t)
-        OPTIONAL MATCH (l:TestIdLoc)-[:RESOLVES_TO]->(t)
-        WITH t, count(DISTINCT f) AS in_adsw, count(DISTINCT l) AS in_loc
+        OPTIONAL MATCH (l_lit:TestIdLoc)-[:RESOLVES_TO]->(t)
+        OPTIONAL MATCH (l_pat:TestIdLoc {project: $project})
+          WHERE t.pattern = true AND size(t.value) > 0
+            AND l_pat.value STARTS WITH t.value
+        WITH t,
+             count(DISTINCT f)     AS in_adsw,
+             count(DISTINCT l_lit) AS in_lit,
+             count(DISTINCT l_pat) AS in_pat
+        WITH in_adsw, (in_lit + in_pat) AS in_loc
         RETURN
           sum(CASE WHEN in_adsw > 0 THEN 1 ELSE 0 END) AS adsw_total,
           sum(CASE WHEN in_adsw > 0 AND in_loc > 0 THEN 1 ELSE 0 END) AS covered,
-          sum(CASE WHEN in_adsw > 0 AND in_loc = 0 THEN 1 ELSE 0 END) AS uncovered,
-          sum(CASE WHEN in_adsw = 0 AND in_loc > 0 THEN 1 ELSE 0 END) AS stale_e2e_only
+          sum(CASE WHEN in_adsw > 0 AND in_loc = 0 THEN 1 ELSE 0 END) AS uncovered
+    """
+    # Stale = literal TestId nodes referenced by e2e (no adsw HAS_TESTID),
+    # and not covered by any pattern node whose prefix matches.
+    cypher_stale = """
+        MATCH (t:TestId {project: $project, pattern: false})
+        OPTIONAL MATCH (:File)-[:HAS_TESTID]->(t)
+          WITH t, count(*) AS in_adsw
+        WHERE in_adsw = 0
+        OPTIONAL MATCH (pt:TestId {project: $project, pattern: true})
+          WHERE size(pt.value) > 0 AND t.value STARTS WITH pt.value
+        WITH t, count(pt) AS pattern_hits
+        WHERE pattern_hits = 0
+        RETURN count(DISTINCT t) AS stale_e2e_only
     """
     with session() as s_:
-        rec = s_.run(cypher, project=project).single()
-    return {"project": project, **(rec.data() if rec else {})}
+        m = s_.run(cypher_main, project=project).single()
+        st = s_.run(cypher_stale, project=project).single()
+    data = {"adsw_total": 0, "covered": 0, "uncovered": 0, "stale_e2e_only": 0}
+    if m:
+        data.update({k: m[k] or 0 for k in ("adsw_total", "covered", "uncovered")})
+    if st:
+        data["stale_e2e_only"] = st["stale_e2e_only"] or 0
+    return {"project": project, **data}
 
 
 @router.get("/testid-search", response_model=TestIdSearchResponse)
