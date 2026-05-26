@@ -43,7 +43,16 @@ async def list_routes(
 
 @router.get("/resolve", response_model=RouteResolveResponse)
 async def resolve_route(project: str, path: str) -> dict:
-    """Full picture for a route: components, guards, permissions, and transitive gql layer."""
+    """Full picture for a route: components, guards, permissions, and transitive gql layer.
+
+    Operations are collected through three channels:
+      1. direct USES_OPERATION from the rendered Component
+      2. WRAPS edges of any hook the Component calls
+      3. anything defined under the page directory the Component belongs
+         to — picks up gql usage in Form/, hooks/, sub-components/, etc.
+         which the route would otherwise miss (Booking.tsx is a thin
+         wrapper around Form/ which is where the mutations actually live).
+    """
     cypher = """
         MATCH (r:Route {project: $project, path: $path})
         OPTIONAL MATCH (r)-[:RENDERS]->(c:Component)
@@ -52,22 +61,37 @@ async def resolve_route(project: str, path: str) -> dict:
         OPTIONAL MATCH (c)-[:CALLS_HOOK]->(h:GqlHook)
         OPTIONAL MATCH (c)-[:USES_OPERATION]->(o:GqlOperation)
         OPTIONAL MATCH (h)-[:WRAPS]->(opViaHook:GqlOperation)
-        WITH r, c, g, p, h, o, opViaHook
+
+        // Component → Page → everything under page dir.
+        OPTIONAL MATCH (c)-[:BELONGS_TO]->(pg:Page)
+        WITH r, c, g, p, h, o, opViaHook, pg,
+             CASE WHEN pg IS NULL THEN null ELSE pg.dir + '/' END AS dir_prefix
+        OPTIONAL MATCH (hPage:GqlHook {project: $project})
+          WHERE dir_prefix IS NOT NULL AND hPage.file STARTS WITH dir_prefix
+        OPTIONAL MATCH (hPage)-[:WRAPS]->(opPageHook:GqlOperation)
+        OPTIONAL MATCH (fSub:File {project: $project})-[:USES_OPERATION]->(opPageDirect:GqlOperation)
+          WHERE dir_prefix IS NOT NULL AND fSub.path STARTS WITH dir_prefix
+        OPTIONAL MATCH (cSub:Component {project: $project})-[:USES_OPERATION]->(opPageDirect2:GqlOperation)
+          WHERE dir_prefix IS NOT NULL AND cSub.file STARTS WITH dir_prefix
+
         RETURN
           {path: r.path, index: r.index, depth: r.depth, file: r.file, line: r.line} AS route,
           collect(DISTINCT g.name) AS guards,
           collect(DISTINCT p.key)  AS permissions,
           collect(DISTINCT {name: c.name, file: c.file, line: c.line}) AS components,
-          collect(DISTINCT {hook: h.name, file: h.file}) AS hooks_via_components,
-          collect(DISTINCT {symbol: o.symbol, gql_name: o.gql_name, kind: o.kind}) AS operations_via_components,
-          collect(DISTINCT {symbol: opViaHook.symbol, gql_name: opViaHook.gql_name, kind: opViaHook.kind}) AS operations_via_hooks
+          collect(DISTINCT {hook: h.name, file: h.file}) +
+          collect(DISTINCT {hook: hPage.name, file: hPage.file}) AS hooks_via_components,
+          collect(DISTINCT {symbol: o.symbol, gql_name: o.gql_name, kind: o.kind}) +
+          collect(DISTINCT {symbol: opPageDirect.symbol, gql_name: opPageDirect.gql_name, kind: opPageDirect.kind}) +
+          collect(DISTINCT {symbol: opPageDirect2.symbol, gql_name: opPageDirect2.gql_name, kind: opPageDirect2.kind}) AS operations_via_components,
+          collect(DISTINCT {symbol: opViaHook.symbol, gql_name: opViaHook.gql_name, kind: opViaHook.kind}) +
+          collect(DISTINCT {symbol: opPageHook.symbol, gql_name: opPageHook.gql_name, kind: opPageHook.kind}) AS operations_via_hooks
     """
     with session() as s:
         rec = s.run(cypher, project=project, path=path).single()
     if not rec or rec["route"] is None:
         raise HTTPException(404, f"route not found: {path} (project={project})")
     data = rec.data()
-    # Cypher returns rows with placeholder dicts when OPTIONAL MATCH fails — strip those
     data["components"] = [c for c in data["components"] if c.get("name")]
     data["hooks_via_components"] = [h for h in data["hooks_via_components"] if h.get("hook")]
     data["operations_via_components"] = [o for o in data["operations_via_components"] if o.get("symbol")]
