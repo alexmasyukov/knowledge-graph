@@ -1,7 +1,7 @@
 import Fastify from 'fastify'
 import { ProjectRegistry } from './project.js'
 import { extractGql } from './extractors/gql.js'
-import { extractRoutes } from './extractors/routes.js'
+import { extractRoutes } from './extractors/routes/index.js'
 import { extractPermissions } from './extractors/permissions.js'
 
 const PORT = Number(process.env.INDEXER_PORT ?? 7401)
