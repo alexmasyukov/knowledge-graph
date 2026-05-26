@@ -17,6 +17,7 @@ from .routes import EXTRACTOR as ROUTES
 from .scip_loader import ScipIndex
 from .scip_runner import index_project as run_scip
 from .scss import EXTRACTOR as SCSS
+from .types_extractor import EXTRACTOR as TYPES
 
 EXTRACTORS: list[Extractor] = [
     GQL,
@@ -26,7 +27,7 @@ EXTRACTORS: list[Extractor] = [
     E2E,
     SCSS,
     DOCS,
-    # types — plug in as it lands.
+    TYPES,
 ]
 
 
