@@ -9,6 +9,7 @@ from ..extractors import routes as routes_extractor
 from ..extractors import permissions as permissions_extractor
 from ..extractors import pages as pages_extractor
 from ..extractors import docs as docs_extractor
+from ..extractors import e2e as e2e_extractor
 from ..settings import settings
 
 
@@ -64,6 +65,7 @@ async def reindex(project: str | None = None) -> dict:
             permissions_result = await permissions_extractor.run_for_project(proj.name)
             pages_result = await pages_extractor.run_for_project(proj.name)
             docs_result = await docs_extractor.run_for_project(proj.name)
+            e2e_result = await e2e_extractor.run_for_project(proj.name)
 
             results.append(
                 {
@@ -74,6 +76,7 @@ async def reindex(project: str | None = None) -> dict:
                     "permissions": permissions_result,
                     "pages": pages_result,
                     "docs": docs_result,
+                    "e2e": e2e_result,
                 }
             )
 

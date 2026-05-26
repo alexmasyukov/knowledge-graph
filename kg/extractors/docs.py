@@ -21,7 +21,7 @@ from ..settings import settings
 
 # Folders inside project root to scan. CLAUDE_OTHER/ deliberately excluded.
 DOC_FOLDERS: tuple[str, ...] = ("CLAUDE",)
-ROOT_FILES: tuple[str, ...] = ("README.md", "CLAUDE.md", "MIGRATION_PLAN.md")
+ROOT_FILES: tuple[str, ...] = ("README.md", "CLAUDE.md")
 
 
 _HEADING_RX = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.MULTILINE)
