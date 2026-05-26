@@ -9,6 +9,8 @@ services:
       NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:?NEO4J_PASSWORD must be set in .env}
       NEO4J_PLUGINS: '["apoc"]'
       NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      # Local-only DB — allow short passwords (4 chars) so you don't need to memorize anything.
+      NEO4J_dbms_security_auth__minimum__password__length: "4"
       NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL:-1G}
       NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-2G}
       NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-1G}

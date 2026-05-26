@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>kg — graph viewer</title>
+  <script src="https://unpkg.com/cytoscape@3.30.0/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #1e1e1e; color: #e0e0e0; }
+    #toolbar { padding: 8px 12px; background: #2a2a2a; border-bottom: 1px solid #3a3a3a; display: flex; gap: 8px; align-items: stretch; }
+    #toolbar textarea { flex: 1; background: #1a1a1a; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; resize: vertical; min-height: 60px; }
+    #toolbar button, #toolbar select { background: #3a7afe; color: white; border: 0; padding: 0 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
+    #toolbar select { background: #333; }
+    #toolbar button:hover { background: #2966dd; }
+    #cy { width: 100%; height: calc(100vh - 96px); }
+    #legend { position: fixed; bottom: 12px; right: 12px; background: rgba(40,40,40,0.92); padding: 8px 12px; border-radius: 6px; font-size: 11px; line-height: 1.6; }
+    #legend .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
+    #status { position: fixed; top: 100px; left: 12px; background: rgba(40,40,40,0.92); padding: 6px 10px; border-radius: 4px; font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <textarea id="cypher" placeholder="Cypher query…">MATCH (r:Route {project: 'adsw'})-[:RENDERS]->(c:Component)
+WHERE r.path STARTS WITH '/services/store-products/bundles'
+OPTIONAL MATCH (r)-[:REQUIRES]->(p:Permission)
+OPTIONAL MATCH (c)-[:CALLS_HOOK]->(h:GqlHook)-[:WRAPS]->(op:GqlOperation)
+RETURN r, c, p, h, op LIMIT 200</textarea>
+    <select id="layout">
+      <option value="dagre">dagre (hierarchical)</option>
+      <option value="cose">cose (force-directed)</option>
+      <option value="breadthfirst">breadth-first</option>
+      <option value="grid">grid</option>
+      <option value="circle">circle</option>
+    </select>
+    <button onclick="run()">Run ⏵</button>
+  </div>
+  <div id="cy"></div>
+  <div id="status"></div>
+  <div id="legend"></div>
+
+  <script>
+    // Per-label colour palette — distinct, reasonable on dark bg.
+    const PALETTE = {
+      Route: '#4ec9b0',
+      Component: '#dcdcaa',
+      Page: '#c586c0',
+      Permission: '#f48771',
+      Guard: '#ce9178',
+      GqlHook: '#9cdcfe',
+      GqlOperation: '#569cd6',
+      File: '#808080',
+      TestId: '#e5c07b',
+      TestIdLoc: '#d19a66',
+      PageObject: '#98c379',
+      E2eSpec: '#61afef',
+      Doc: '#a0a0a0',
+      Domain: '#c678dd',
+      ScssModule: '#56b6c2',
+    };
+    const DEFAULT_COLOR = '#888';
+
+    function colour(label) { return PALETTE[label] || DEFAULT_COLOR; }
+
+    function buildLegend(labels) {
+      const el = document.getElementById('legend');
+      el.innerHTML = labels.map(l =>
+        `<div><span class="swatch" style="background:${colour(l)}"></span>${l}</div>`
+      ).join('');
+    }
+
+    let cy = null;
+
+    async function run() {
+      const cypher = document.getElementById('cypher').value;
+      const layout = document.getElementById('layout').value;
+      const status = document.getElementById('status');
+      status.textContent = 'Loading…';
+      try {
+        const resp = await fetch(`/viz/graph?cypher=${encodeURIComponent(cypher)}`);
+        if (!resp.ok) {
+          status.textContent = 'Error: ' + (await resp.text());
+          return;
+        }
+        const data = await resp.json();
+        renderGraph(data, layout);
+        status.textContent = `${data.nodes.length} nodes · ${data.edges.length} edges`;
+      } catch (e) {
+        status.textContent = 'Error: ' + e.message;
+      }
+    }
+
+    function renderGraph(data, layoutName) {
+      const labels = [...new Set(data.nodes.map(n => n.data.label))];
+      buildLegend(labels);
+
+      if (cy) cy.destroy();
+
+      cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: [...data.nodes, ...data.edges],
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'shape': 'round-rectangle',
+              'background-color': ele => colour(ele.data('label')),
+              'border-color': '#1a1a1a',
+              'border-width': 1,
+              'label': ele => `${ele.data('label')}\n${ele.data('caption')}`,
+              'text-wrap': 'wrap',
+              'text-max-width': '240px',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'color': '#1a1a1a',
+              'font-size': '12px',
+              'font-weight': 500,
+              'padding': '10px',
+              'width': 'label',
+              'height': 'label',
+              'text-margin-y': 0,
+            }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'curve-style': 'bezier',
+              'target-arrow-shape': 'triangle',
+              'line-color': '#555',
+              'target-arrow-color': '#555',
+              'width': 1.5,
+              'label': 'data(label)',
+              'font-size': '10px',
+              'color': '#999',
+              'text-rotation': 'autorotate',
+              'text-background-color': '#1e1e1e',
+              'text-background-opacity': 0.85,
+              'text-background-padding': '2px',
+            }
+          },
+          {
+            selector: 'node:selected',
+            style: { 'border-width': 3, 'border-color': '#3a7afe' }
+          }
+        ],
+        layout: layoutConfig(layoutName),
+      });
+
+      // Click → print full props in status bar
+      cy.on('tap', 'node', evt => {
+        const n = evt.target.data();
+        const propStr = Object.entries(n.props).slice(0, 6).map(([k, v]) => `${k}=${v}`).join(' · ');
+        document.getElementById('status').textContent = `${n.label}  ${n.caption}  [${propStr}]`;
+      });
+    }
+
+    function layoutConfig(name) {
+      if (name === 'dagre') return { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80 };
+      if (name === 'cose') return { name: 'cose', animate: false, nodeRepulsion: 6000, idealEdgeLength: 120 };
+      if (name === 'breadthfirst') return { name: 'breadthfirst', directed: true, spacingFactor: 1.4 };
+      return { name };
+    }
+
+    // Auto-run on page load.
+    window.addEventListener('DOMContentLoaded', run);
+
+    // Cmd/Ctrl+Enter in textarea → run
+    document.getElementById('cypher').addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+    });
+  </script>
+</body>
+</html>
