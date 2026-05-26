@@ -4,12 +4,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import (
+    PermissionInfoResponse,
+    PermissionsListResponse,
+    RolesListResponse,
+)
 
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 
 
-@router.get("/list")
+@router.get("/list", response_model=PermissionsListResponse)
 async def list_permissions(
     project: str,
     prefix: str | None = Query(default=None, description="key prefix filter"),
@@ -30,7 +35,7 @@ async def list_permissions(
     return {"project": project, "count": len(rows), "permissions": rows}
 
 
-@router.get("/info/{key}")
+@router.get("/info/{key}", response_model=PermissionInfoResponse)
 async def permission_info(key: str, project: str) -> dict:
     cypher = """
         MATCH (pe:Permission {project: $project, key: $key})
@@ -49,7 +54,7 @@ async def permission_info(key: str, project: str) -> dict:
     return {"project": project, **rec.data()}
 
 
-@router.get("/roles")
+@router.get("/roles", response_model=RolesListResponse)
 async def list_roles(project: str) -> dict:
     cypher = """
         MATCH (role:Role {project: $project})

@@ -4,12 +4,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import (
+    DomainsListResponse,
+    PageGetResponse,
+    PagesListResponse,
+)
 
 
 router = APIRouter(prefix="/pages", tags=["pages"])
 
 
-@router.get("/list")
+@router.get("/list", response_model=PagesListResponse)
 async def list_pages(
     project: str,
     domain: str | None = Query(default=None, description="filter by domain"),
@@ -30,7 +35,7 @@ async def list_pages(
     return {"project": project, "count": len(rows), "pages": rows}
 
 
-@router.get("/get")
+@router.get("/get", response_model=PageGetResponse)
 async def get_page(project: str, domain: str, entity: str = "") -> dict:
     cypher = """
         MATCH (pg:Page {project: $project, domain: $domain, entity: $entity})
@@ -60,7 +65,7 @@ async def get_page(project: str, domain: str, entity: str = "") -> dict:
     return {"project": project, **rec.data()}
 
 
-@router.get("/domains")
+@router.get("/domains", response_model=DomainsListResponse)
 async def list_domains(project: str) -> dict:
     cypher = """
         MATCH (d:Domain {project: $project})

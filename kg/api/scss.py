@@ -4,12 +4,13 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import ScssClassResponse, ScssListResponse
 
 
 router = APIRouter(prefix="/scss", tags=["scss"])
 
 
-@router.get("/list")
+@router.get("/list", response_model=ScssListResponse)
 async def list_modules(
     project: str,
     class_name: str | None = Query(default=None, description="filter by class name presence"),
@@ -27,7 +28,7 @@ async def list_modules(
     return {"project": project, "count": len(rows), "modules": rows}
 
 
-@router.get("/class/{name}")
+@router.get("/class/{name}", response_model=ScssClassResponse)
 async def class_usage(name: str, project: str) -> dict:
     """Find which scss modules declare this class and which files use those modules."""
     cypher = """

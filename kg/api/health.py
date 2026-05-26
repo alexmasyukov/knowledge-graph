@@ -7,10 +7,13 @@ from ..db import ping
 from ..settings import settings
 
 
+from ._models import HealthResponse
+
+
 router = APIRouter()
 
 
-@router.get("/health")
+@router.get("/health", response_model=HealthResponse)
 async def health() -> dict:
     out: dict = {"service": "kg-core", "ok": True}
 

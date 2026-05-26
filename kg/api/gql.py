@@ -4,12 +4,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import (
+    GqlCallsitesResponse,
+    GqlHookInfoResponse,
+    GqlListResponse,
+)
 
 
 router = APIRouter(prefix="/gql", tags=["gql"])
 
 
-@router.get("/operations")
+@router.get("/operations", response_model=GqlListResponse)
 async def list_operations(
     project: str,
     kind: str | None = Query(default=None, description="query|mutation|subscription|fragment"),
@@ -33,7 +38,7 @@ async def list_operations(
     return {"project": project, "count": len(rows), "operations": rows}
 
 
-@router.get("/hooks/{name}")
+@router.get("/hooks/{name}", response_model=GqlHookInfoResponse)
 async def hook_info(name: str, project: str) -> dict:
     cypher = """
         MATCH (h:GqlHook {project: $project, name: $name})
@@ -54,7 +59,7 @@ async def hook_info(name: str, project: str) -> dict:
     return {"project": project, "name": name, **rec.data()}
 
 
-@router.get("/callsites")
+@router.get("/callsites", response_model=GqlCallsitesResponse)
 async def find_callsites(
     project: str,
     target: str = Query(..., description="GqlOperation symbol OR GqlHook name"),

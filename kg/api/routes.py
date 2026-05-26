@@ -4,12 +4,17 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import (
+    ComponentRoutesResponse,
+    RouteResolveResponse,
+    RoutesListResponse,
+)
 
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
 
-@router.get("/list")
+@router.get("/list", response_model=RoutesListResponse)
 async def list_routes(
     project: str,
     prefix: str | None = Query(default=None, description="filter by path prefix"),
@@ -36,7 +41,7 @@ async def list_routes(
     return {"project": project, "count": len(rows), "routes": rows}
 
 
-@router.get("/resolve")
+@router.get("/resolve", response_model=RouteResolveResponse)
 async def resolve_route(project: str, path: str) -> dict:
     """Full picture for a route: components, guards, permissions, and transitive gql layer."""
     cypher = """
@@ -70,7 +75,7 @@ async def resolve_route(project: str, path: str) -> dict:
     return {"project": project, **data}
 
 
-@router.get("/by-component")
+@router.get("/by-component", response_model=ComponentRoutesResponse)
 async def routes_by_component(project: str, name: str) -> dict:
     cypher = """
         MATCH (c:Component {project: $project, name: $name})

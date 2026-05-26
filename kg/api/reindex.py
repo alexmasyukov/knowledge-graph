@@ -11,11 +11,13 @@ from ..http import client
 from ..settings import settings
 
 
+from ._models import ReindexResponse
+
 router = APIRouter()
 log = logging.getLogger("kg.reindex")
 
 
-@router.post("/reindex")
+@router.post("/reindex", response_model=ReindexResponse)
 async def reindex(project: str | None = None) -> dict:
     """Reindex one or all configured projects.
 

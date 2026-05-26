@@ -4,12 +4,18 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
+from ._models import (
+    CoverageResponse,
+    SpecsListResponse,
+    TestIdInfoResponse,
+    TestIdSearchResponse,
+)
 
 
 router = APIRouter(prefix="/e2e", tags=["e2e"])
 
 
-@router.get("/specs")
+@router.get("/specs", response_model=SpecsListResponse)
 async def list_specs(
     project: str,
     name_substr: str | None = Query(default=None),
@@ -50,7 +56,7 @@ async def spec_info(project: str, file: str, line: int) -> dict:
     return {"project": project, **rec.data()}
 
 
-@router.get("/testid/{value:path}")
+@router.get("/testid/{value:path}", response_model=TestIdInfoResponse)
 async def testid_info(value: str, project: str) -> dict:
     cypher = """
         MATCH (t:TestId {project: $project, value: $value})
@@ -77,7 +83,7 @@ async def testid_info(value: str, project: str) -> dict:
     return {"project": project, **rec.data()}
 
 
-@router.get("/coverage")
+@router.get("/coverage", response_model=CoverageResponse)
 async def coverage(project: str) -> dict:
     """How many testids defined in adsw source are referenced by e2e locators.
 
@@ -100,7 +106,7 @@ async def coverage(project: str) -> dict:
     return {"project": project, **(rec.data() if rec else {})}
 
 
-@router.get("/testid-search")
+@router.get("/testid-search", response_model=TestIdSearchResponse)
 async def testid_search(
     project: str,
     q: str = Query(..., min_length=2, description="prefix or substring of testid value"),

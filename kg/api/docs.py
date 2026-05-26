@@ -5,12 +5,13 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..db import session
 from ..extractors import docs as docs_extractor
+from ._models import DocGetResponse, DocsListResponse, DocsSearchResponse
 
 
 router = APIRouter(prefix="/docs", tags=["docs"])
 
 
-@router.get("/list")
+@router.get("/list", response_model=DocsListResponse)
 async def list_docs(project: str) -> dict:
     cypher = """
         MATCH (d:Doc {project: $project})
@@ -23,7 +24,7 @@ async def list_docs(project: str) -> dict:
     return {"project": project, "count": len(rows), "docs": rows}
 
 
-@router.get("/get/{name}")
+@router.get("/get/{name}", response_model=DocGetResponse)
 async def get_doc(name: str, project: str) -> dict:
     doc = docs_extractor.read_doc(project, name)
     if doc is None:
@@ -31,7 +32,7 @@ async def get_doc(name: str, project: str) -> dict:
     return {"project": project, **doc}
 
 
-@router.get("/search")
+@router.get("/search", response_model=DocsSearchResponse)
 async def search_docs(project: str, q: str = Query(..., min_length=2)) -> dict:
     """Case-insensitive substring search across doc titles and headings."""
     cypher = """
