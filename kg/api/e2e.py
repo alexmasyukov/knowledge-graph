@@ -161,18 +161,26 @@ async def coverage(project: str) -> dict:
     Only adsw-defined testids count toward the denominator; locator-only
     values (referenced in e2e but not present in app code as either a
     literal or a matching pattern prefix) are reported separately."""
+    # Coverage rule:
+    #  - literal testid is covered when a locator RESOLVES_TO it directly.
+    #  - pattern testid is covered when ANY literal testid whose value
+    #    starts with the pattern prefix has a RESOLVES_TO edge. We have
+    #    to walk locator → literal-TestId, NOT locator → pattern-TestId,
+    #    because TestIdLoc.value is the full CSS selector, not the
+    #    testid string.
     cypher_main = """
         MATCH (t:TestId {project: $project})
         OPTIONAL MATCH (f:File)-[:HAS_TESTID]->(t)
         OPTIONAL MATCH (l_lit:TestIdLoc)-[:RESOLVES_TO]->(t)
-        OPTIONAL MATCH (l_pat:TestIdLoc {project: $project})
+        OPTIONAL MATCH (lit:TestId {project: $project, pattern: false})
           WHERE t.pattern = true AND size(t.value) > 0
-            AND l_pat.value STARTS WITH t.value
+            AND lit.value STARTS WITH t.value
+        OPTIONAL MATCH (l_via:TestIdLoc)-[:RESOLVES_TO]->(lit)
         WITH t,
              count(DISTINCT f)     AS in_adsw,
              count(DISTINCT l_lit) AS in_lit,
-             count(DISTINCT l_pat) AS in_pat
-        WITH in_adsw, (in_lit + in_pat) AS in_loc
+             count(DISTINCT l_via) AS in_via
+        WITH in_adsw, (in_lit + in_via) AS in_loc
         RETURN
           sum(CASE WHEN in_adsw > 0 THEN 1 ELSE 0 END) AS adsw_total,
           sum(CASE WHEN in_adsw > 0 AND in_loc > 0 THEN 1 ELSE 0 END) AS covered,
@@ -214,14 +222,17 @@ async def uncovered_testids(
     file and sorted by descending uncovered-count, which is how e2e
     planners tend to look at it ('this form has 12 untestable inputs').
     Toggle off to get a flat list."""
+    # Same coverage rule as /e2e/coverage — pattern is covered when any
+    # of its literal sub-values has a RESOLVES_TO edge from a locator.
     cypher = """
         MATCH (t:TestId {project: $project})
         MATCH (f:File)-[h:HAS_TESTID]->(t)
         OPTIONAL MATCH (l_lit:TestIdLoc)-[:RESOLVES_TO]->(t)
-        OPTIONAL MATCH (l_pat:TestIdLoc {project: $project})
+        OPTIONAL MATCH (lit:TestId {project: $project, pattern: false})
           WHERE t.pattern = true AND size(t.value) > 0
-            AND l_pat.value STARTS WITH t.value
-        WITH t, f, h, count(DISTINCT l_lit) + count(DISTINCT l_pat) AS in_loc
+            AND lit.value STARTS WITH t.value
+        OPTIONAL MATCH (l_via:TestIdLoc)-[:RESOLVES_TO]->(lit)
+        WITH t, f, h, count(DISTINCT l_lit) + count(DISTINCT l_via) AS in_loc
         WHERE in_loc = 0
         RETURN t.value AS value, t.pattern AS pattern,
                f.path AS file, h.line AS line
