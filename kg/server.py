@@ -7,11 +7,13 @@ from fastapi import FastAPI
 from .api import gql, health, reindex, routes_api, docs, permissions_api, pages_api, e2e_api, scss_api
 from .db import close_driver, init_schema
 from .http import close as close_http
+from .logger import setup as setup_logging
 from .settings import settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    setup_logging()
     init_schema()
     yield
     await close_http()
