@@ -96,6 +96,8 @@ def init_schema() -> None:
             ("Guard", "name"),
             ("Permission", "project"),
             ("Permission", "key"),
+            ("Role", "project"),
+            ("Role", "code"),
         ]
         for label, prop in wanted_indexes:
             if (label, prop) not in existing_indexes:
