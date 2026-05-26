@@ -156,17 +156,22 @@ def _write(project: str, pages: list[dict[str, Any]], domains: list[str]) -> dic
                 ],
             )
 
+        # Match Component nodes by *file path*, not by name — routes extractor
+        # records the JSX local name (e.g. `PartnerDeals` from
+        # `const PartnerDeals = React.lazy(() => import('@pages/.../Deals'))`),
+        # which differs from the page-side filename (`Deals.tsx`). The file
+        # path is the only stable join key.
         comp_to_page = []
         for pg in pages:
             for c in pg["components"]:
                 comp_to_page.append(
-                    {"component": c["name"], "domain": pg["domain"], "entity": pg["entity"] or ""}
+                    {"file": c["file"], "domain": pg["domain"], "entity": pg["entity"] or ""}
                 )
         if comp_to_page:
             s.run(
                 """
                 UNWIND $items AS i
-                MATCH (co:Component {project: $project, name: i.component})
+                MATCH (co:Component {project: $project, file: i.file})
                 MATCH (pg:Page {project: $project, domain: i.domain, entity: i.entity})
                 MERGE (co)-[:BELONGS_TO]->(pg)
                 """,
