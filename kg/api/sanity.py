@@ -146,11 +146,12 @@ def probe_permissions_undeclared(project: str) -> list[dict]:
     src/common/permissions/index.ts — i.e. typo'd or stale key."""
     rows = _q(
         """
-        MATCH (p:Permission {project: $project})
-        WHERE p.file IS NULL
-        OPTIONAL MATCH (r:Route)-[:REQUIRES]->(p)
-        RETURN p.key AS key, collect(DISTINCT r.path) AS routes
-        ORDER BY p.key
+        MATCH (perm:Permission {project: $project})
+        WHERE perm.file IS NULL
+        OPTIONAL MATCH (r:Route)-[:REQUIRES]->(perm)
+        WITH perm, collect(DISTINCT r.path) AS routes
+        RETURN perm.key AS key, routes
+        ORDER BY perm.key
         """,
         project=project,
     )
