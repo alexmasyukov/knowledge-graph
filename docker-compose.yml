@@ -24,3 +24,22 @@ services:
     environment:
       QUICK_CONNECT_MG_HOST: memgraph
       QUICK_CONNECT_MG_PORT: 7687
+
+  # Optional: Sourcegraph self-hosted for SCIP-backed code search/refs UI.
+  # `docker compose --profile sourcegraph up -d` to bring it up.
+  # First-run flow:
+  #   1. Open http://localhost:7080, create the site admin account.
+  #   2. Add a local repo via Site admin → Manage code hosts → Local
+  #      (or sync from GitHub/GitLab if you prefer).
+  #   3. Upload the .scip with `src code-intel upload -file <scip>`
+  #      (see scripts/upload-scip.sh — runs after every kg reindex).
+  sourcegraph:
+    image: sourcegraph/server:5.5.0
+    container_name: kg-sourcegraph
+    profiles: ["sourcegraph"]
+    ports:
+      - "${SOURCEGRAPH_PORT:-7080}:7080"
+      - "${SOURCEGRAPH_HTTPS_PORT:-7443}:7443"
+    volumes:
+      - ./sourcegraph_data/etc:/etc/sourcegraph
+      - ./sourcegraph_data/data:/var/opt/sourcegraph

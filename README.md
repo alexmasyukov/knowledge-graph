@@ -170,9 +170,43 @@ Probes don't enforce anything; they surface unknowns.
 
 ## Tests
 
-`uv run pytest tests/` (when present — see `WORK_LOG.md`). Tests use
-a separate Memgraph DB or a wipe-between-fixture; SCIP fixtures are
-committed to keep extractor tests hermetic.
+`uv run pytest tests/` — 11 tests, ~50 ms suite. Pure-parse extractors
+run against a synthetic tmp_path workspace; API tests seed Memgraph
+directly via Cypher and use a dedicated `kgtest` project name so the
+live adsw graph stays untouched.
+
+## Live mode (watcher)
+
+```bash
+uv run python -m kg.watcher adsw
+```
+
+Watches `<project.code_root>/src/` and triggers a debounced full
+reindex on TS/TSX/SCSS/MD edits. SCIP runs from scratch every time
+(scip-typescript has no per-file mode), but the API stays available
+between runs.
+
+A faster `since=` short-circuit also exists:
+
+```bash
+curl -X POST 'http://127.0.0.1:7400/reindex?project=adsw&since=HEAD'
+```
+
+— returns immediately when git reports no changes under the project's
+code_root since the given ref.
+
+## Optional: Sourcegraph self-hosted
+
+```bash
+docker compose --profile sourcegraph up -d sourcegraph
+# Open http://localhost:7080, create admin, add a code host.
+
+# Then upload the .scip on every reindex:
+SRC_ACCESS_TOKEN=<token> scripts/upload-scip.sh adsw
+```
+
+Gives you a richer code-search UI backed by the same SCIP index the
+graph uses internally. Not required for the MCP contract.
 
 ## Branch layout
 
