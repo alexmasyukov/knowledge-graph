@@ -15,6 +15,7 @@ from .permissions import EXTRACTOR as PERMISSIONS
 from .routes import EXTRACTOR as ROUTES
 from .scip_loader import ScipIndex
 from .scip_runner import index_project as run_scip
+from .scss import EXTRACTOR as SCSS
 
 EXTRACTORS: list[Extractor] = [
     GQL,
@@ -22,7 +23,8 @@ EXTRACTORS: list[Extractor] = [
     PERMISSIONS,
     PAGES,
     E2E,
-    # scss / docs / types — plug in as they land.
+    SCSS,
+    # docs / types — plug in as they land.
 ]
 
 
