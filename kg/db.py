@@ -57,16 +57,21 @@ def init_schema() -> None:
     already there. This avoids swallowing real errors via try/except.
     """
     with session() as s:
-        existing_indexes: set[tuple[str | None, str | None]] = set()
+        # Memgraph 3.6 column names use a space: 'index type', 'constraint type'.
+        # `property` / `properties` come back as list[str], even for a
+        # single-prop index.
+        existing_indexes: set[tuple[str, str]] = set()
         for row in s.run("SHOW INDEX INFO").data():
-            existing_indexes.add((row.get("label"), row.get("property")))
+            label = row.get("label") or ""
+            props = row.get("property") or row.get("properties") or [""]
+            existing_indexes.add((label, props[0] if props else ""))
 
         existing_constraints: set[tuple[str, str, str]] = set()
         for row in s.run("SHOW CONSTRAINT INFO").data():
+            ctype = row.get("constraint type") or row.get("constraint_type") or ""
+            label = row.get("label") or ""
             props = row.get("properties") or []
-            existing_constraints.add(
-                (row.get("constraint_type", ""), row.get("label", ""), ",".join(props))
-            )
+            existing_constraints.add((ctype, label, ",".join(props)))
 
         if ("unique", "Project", "name") not in existing_constraints:
             s.run("CREATE CONSTRAINT ON (p:Project) ASSERT p.name IS UNIQUE")

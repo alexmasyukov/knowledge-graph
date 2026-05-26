@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .api import health
+from .api import health, reindex
 from .db import close_driver, init_schema
 from .settings import settings
 
@@ -27,6 +27,7 @@ app = FastAPI(
 )
 
 app.include_router(health.router, tags=["meta"])
+app.include_router(reindex.router, tags=["ingest"])
 
 
 def main() -> None:
