@@ -1,25 +1,25 @@
 [project]
 name = "knowledge-graph"
-version = "0.0.1"
-description = "Code intelligence knowledge graph for arenadata frontend projects"
+version = "0.1.0"
+description = "Code intelligence knowledge graph (Memgraph + SCIP + tree-sitter)"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115",
   "uvicorn[standard]>=0.32",
   "pydantic>=2.9",
-  "pydantic-settings>=2.6",
-  "neo4j>=5.25",
+  "neo4j>=5.25",        # Bolt driver, talks to Memgraph
   "httpx>=0.28",
-  "watchdog>=5.0",
-  "typer>=0.13",
-  "questionary>=2.0",
   "python-dotenv>=1.0",
-  "protobuf>=7.35.0",
+  "protobuf>=7.35.0",   # for scip.proto
+  "tree-sitter>=0.23",
+  "tree-sitter-language-pack>=0.4",
 ]
 
 [dependency-groups]
 dev = [
   "ruff>=0.8",
+  "pytest>=8.0",
+  "pytest-asyncio>=0.24",
 ]
 
 [tool.uv]
@@ -28,25 +28,21 @@ package = false
 [tool.ruff]
 line-length = 110
 target-version = "py312"
-extend-exclude = [".venv", "neo4j_data", "neo4j_logs", ".run", ".logs"]
+extend-exclude = [".venv", "memgraph_data", "memgraph_logs", ".run", ".logs", "scip-indexer/scip_pb2.py"]
 
 [tool.ruff.lint]
-# E: pycodestyle errors    F: pyflakes
-# I: isort                 UP: pyupgrade
-# B: bugbear               SIM: simplify
-# RUF: ruff-specific
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 ignore = [
-  "E501",   # line-too-long (handled by formatter)
-  "B008",   # function call in default arg — FastAPI uses Query(...)
-  "SIM105", # try/except/pass — sometimes clearer than contextlib.suppress
-  "SIM108", # ternary suggestion — sometimes hurts readability
-  "SIM117", # combine nested `with` — splitting reads better with rich's context managers
-  "RUF001", # ambiguous unicode in strings — we use unicode glyphs in CLI/UI on purpose
-  "RUF002", # same, in docstrings
-  "RUF003", # same, in comments
+  "E501",
+  "B008",
+  "SIM105",
+  "SIM108",
+  "SIM117",
+  "RUF001",
+  "RUF002",
+  "RUF003",
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"kg/extractors/__init__.py" = ["F401"]   # re-exports
-"kg/api/_models.py"        = ["UP007"]   # `X | None` is fine but pydantic prefers Optional for some cases
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

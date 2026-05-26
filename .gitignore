@@ -3,12 +3,10 @@ __pycache__/
 *.pyc
 .env
 
-neo4j_data/
-neo4j_logs/
+memgraph_data/
+memgraph_logs/
 
 node_modules/
-dist/
-*.tsbuildinfo
 
 .run/
 .logs/
