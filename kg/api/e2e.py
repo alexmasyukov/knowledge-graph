@@ -63,39 +63,90 @@ async def spec_info(project: str, file: str, line: int) -> dict:
 
 @router.get("/testid/{value:path}", response_model=TestIdInfoResponse)
 async def testid_info(value: str, project: str) -> dict:
-    # We union two sources of TestId nodes for the same requested value:
-    # the literal node (if any) and any pattern node whose static prefix
-    # matches. This way `sidebar-booking` shows BOTH the locator (literal
-    # node, created from `[data-testid="sidebar-booking"]`) AND the adsw
-    # source files of the pattern `sidebar-` it actually maps to.
-    cypher = """
+    # Three passes — cleaner than juggling literal-direct and pattern-prefix
+    # locator lookups inside one OPTIONAL MATCH tree, which mishandles the
+    # nested collect()/WITH bookkeeping. The same `value` may resolve to
+    # several TestId nodes (e.g. literal `sidebar-booking` + pattern
+    # `sidebar-`); we union them.
+    q_nodes = """
         MATCH (t:TestId {project: $project})
         WHERE (t.pattern = false AND t.value = $value)
            OR (t.pattern = true  AND size(t.value) > 0 AND $value STARTS WITH t.value)
-        WITH collect(t) AS ts
-        WHERE size(ts) > 0
-        UNWIND ts AS t
-        OPTIONAL MATCH (f:File)-[h:HAS_TESTID]->(t)
-        OPTIONAL MATCH (l:TestIdLoc)-[:RESOLVES_TO]->(t)
+        RETURN t.value AS v, t.pattern AS p
+    """
+    q_sources = """
+        MATCH (t:TestId {project: $project, value: $v, pattern: $p})
+        MATCH (f:File)-[h:HAS_TESTID]->(t)
+        RETURN DISTINCT f.path AS file, h.line AS line
+    """
+    q_locs_literal = """
+        MATCH (t:TestId {project: $project, value: $v, pattern: false})
+        MATCH (l:TestIdLoc)-[:RESOLVES_TO]->(t)
         OPTIONAL MATCH (po:PageObject)-[:DEFINES_LOC]->(l)
         OPTIONAL MATCH (sp:E2eSpec)-[:USES_POM]->(po)
-        WITH
-          collect(DISTINCT {file: f.path, line: h.line}) AS adsw_sources,
-          collect(DISTINCT {name: l.name, file: l.file, line: l.line}) AS locators,
-          collect(DISTINCT po.name) AS page_objects,
-          collect(DISTINCT {name: sp.name, file: sp.file, line: sp.line}) AS specs
-        RETURN
-          $value AS value,
-          [s IN adsw_sources WHERE s.file IS NOT NULL] AS adsw_sources,
-          [l IN locators     WHERE l.name IS NOT NULL] AS locators,
-          [p IN page_objects WHERE p IS NOT NULL]     AS page_objects,
-          [s IN specs        WHERE s.name IS NOT NULL] AS specs
+        RETURN l.name AS name, l.file AS file, l.line AS line,
+               collect(DISTINCT po.name) AS poms,
+               collect(DISTINCT {name: sp.name, file: sp.file, line: sp.line}) AS specs
     """
+    # For pattern testids we go through literal TestId nodes whose value
+    # starts with the pattern's prefix — those carry RESOLVES_TO edges
+    # from locators. TestIdLoc.value itself is the full CSS selector
+    # (e.g. `[data-testid="sidebar-booking"]`), not the testid string.
+    q_locs_pattern = """
+        MATCH (t:TestId {project: $project, value: $v, pattern: true})
+        MATCH (lit:TestId {project: $project, pattern: false})
+          WHERE size(t.value) > 0 AND lit.value STARTS WITH t.value
+        MATCH (l:TestIdLoc)-[:RESOLVES_TO]->(lit)
+        OPTIONAL MATCH (po:PageObject)-[:DEFINES_LOC]->(l)
+        OPTIONAL MATCH (sp:E2eSpec)-[:USES_POM]->(po)
+        RETURN l.name AS name, l.file AS file, l.line AS line,
+               collect(DISTINCT po.name) AS poms,
+               collect(DISTINCT {name: sp.name, file: sp.file, line: sp.line}) AS specs
+    """
+
+    sources: list[dict] = []
+    locators: list[dict] = []
+    poms: set[str] = set()
+    specs_by_key: dict[tuple, dict] = {}
+
     with session() as s_:
-        rec = s_.run(cypher, project=project, value=value).single()
-    if not rec or rec["value"] is None:
-        raise HTTPException(404, f"testid not found: {value} (project={project})")
-    return {"project": project, **rec.data()}
+        nodes = s_.run(q_nodes, project=project, value=value).data()
+        if not nodes:
+            raise HTTPException(404, f"testid not found: {value} (project={project})")
+        for n in nodes:
+            for r in s_.run(q_sources, project=project, v=n["v"], p=n["p"]).data():
+                sources.append({"file": r["file"], "line": r["line"]})
+            q = q_locs_literal if not n["p"] else q_locs_pattern
+            for r in s_.run(q, project=project, v=n["v"]).data():
+                locators.append({"name": r["name"], "file": r["file"], "line": r["line"]})
+                for pn in r["poms"] or []:
+                    if pn:
+                        poms.add(pn)
+                for sp in r["specs"] or []:
+                    if sp.get("name"):
+                        specs_by_key[(sp["file"], sp["line"])] = sp
+
+    seen_src: set[tuple] = set()
+    sources = [
+        src for src in sources
+        if (src["file"], src["line"]) not in seen_src
+        and not seen_src.add((src["file"], src["line"]))
+    ]
+    seen_loc: set[tuple] = set()
+    locators = [
+        loc for loc in locators
+        if (loc["name"], loc["file"]) not in seen_loc
+        and not seen_loc.add((loc["name"], loc["file"]))
+    ]
+
+    return {
+        "project": project,
+        "value": value,
+        "adsw_sources": sources,
+        "locators": locators,
+        "page_objects": sorted(poms),
+        "specs": list(specs_by_key.values()),
+    }
 
 
 @router.get("/coverage", response_model=CoverageResponse)
