@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+
+from .api import health, reindex
+from .db import close_driver, init_schema
+from .settings import settings
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_schema()
+    yield
+    close_driver()
+
+
+app = FastAPI(
+    title="knowledge-graph",
+    version="0.0.1",
+    description="Code intelligence knowledge graph",
+    lifespan=lifespan,
+)
+
+app.include_router(health.router, tags=["meta"])
+app.include_router(reindex.router, tags=["ingest"])
+
+
+def main() -> None:
+    import uvicorn
+
+    uvicorn.run(
+        "kg.server:app",
+        host=settings.api_host,
+        port=settings.api_port,
+        reload=False,
+    )
+
+
+if __name__ == "__main__":
+    main()
