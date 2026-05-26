@@ -39,10 +39,16 @@ class Settings(BaseModel):
                 )
             )
 
+        password = os.getenv("NEO4J_PASSWORD")
+        if not password:
+            raise RuntimeError(
+                "NEO4J_PASSWORD is not set. Copy .env.example to .env and fill in real values."
+            )
+
         return cls(
             neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
             neo4j_user=os.getenv("NEO4J_USER", "neo4j"),
-            neo4j_password=os.getenv("NEO4J_PASSWORD", "knowledge-graph"),
+            neo4j_password=password,
             indexer_url=os.getenv("INDEXER_URL", "http://127.0.0.1:7401"),
             api_host=os.getenv("API_HOST", "127.0.0.1"),
             api_port=int(os.getenv("API_PORT", "7400")),

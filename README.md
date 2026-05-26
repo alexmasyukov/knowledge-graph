@@ -25,7 +25,7 @@ uv run python -m kg.cli reindex adsw
 ```
 
 После старта:
-- Neo4j Browser: <http://localhost:7474> (neo4j / knowledge-graph)
+- Neo4j Browser: <http://localhost:7474> (login: значения из `NEO4J_USER` / `NEO4J_PASSWORD` в `.env`)
 - API health:   <http://127.0.0.1:7400/health>
 - API docs:     <http://127.0.0.1:7400/docs>
 
@@ -46,9 +46,17 @@ knowledge-graph/
 
 ## Фазы
 
-- **Phase 0** (текущая) — скелет: Neo4j up, indexer/core skeletons, MCP `kg_health`
+- **Phase 0** — скелет: Neo4j up, indexer/core skeletons, MCP `kg_health`
 - **Phase 1** — GraphQL operations + hooks + callsites
 - **Phase 2** — Routes resolve (route → component → guards → gql)
-- **Phase 3** — Pages, Permissions, Docs (CLAUDE/)
-- **Phase 4** — E2E specs + page-objects
-- **Phase 5** — SCSS, Codegen, Kendo
+- **Phase 3** — Pages, Permissions (source-of-truth), Docs (`CLAUDE/`)
+- **Phase 4** — E2E specs + page-objects + testid bridge
+- **Phase 5** — SCSS modules
+
+## Безопасность
+
+- `.env` в `.gitignore` — все секреты (пароль Neo4j, пути к проектам) живут только там
+- `docker-compose.yml` берёт `NEO4J_USER` / `NEO4J_PASSWORD` из `.env`; **обязательно**
+  поставить непустое значение перед первым `docker compose up`
+- Пути к индексируемым кодовым базам задаются переменными `PROJECT_<NAME>=…` в `.env`
+  и не попадают в репозиторий
