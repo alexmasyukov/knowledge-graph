@@ -114,6 +114,16 @@
     #detail.collapsed { transform: translateX(calc(100% + 24px)); }
     #detail.dragging { transition: none; user-select: none; }
     #detail-header { cursor: move; }
+    /* width-resize handle on the left edge */
+    #detail-resize-x {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 6px;
+      cursor: ew-resize;
+      background: transparent;
+      z-index: 1;
+    }
+    #detail-resize-x:hover { background: rgba(255,255,255,0.06); }
     #detail-header {
       padding: 12px 16px;
       border-bottom: 1px solid #3a3a3a;
@@ -221,6 +231,7 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
   <div id="stage">
     <div id="cy"></div>
     <aside id="detail" class="collapsed">
+      <div id="detail-resize-x" title="Drag to resize"></div>
       <div id="detail-header">
         <span id="detail-label"></span>
         <span id="detail-caption"></span>
@@ -313,6 +324,32 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
         detail.style.left = 'auto';
         detail.style.right = '12px';
         syncDetailTop();
+      });
+
+      // Horizontal resize via the left-edge handle.
+      const xHandle = document.getElementById('detail-resize-x');
+      let rdragging = false;
+      xHandle.addEventListener('mousedown', e => {
+        rdragging = true;
+        // Anchor to current right edge so resize grows/shrinks toward left.
+        const rect = detail.getBoundingClientRect();
+        detail.style.left = 'auto';
+        detail.style.right = (window.innerWidth - rect.right) + 'px';
+        detail.style.maxWidth = 'none';
+        detail.classList.add('dragging');
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      document.addEventListener('mousemove', e => {
+        if (!rdragging) return;
+        const rect = detail.getBoundingClientRect();
+        const w = Math.max(240, Math.min(window.innerWidth - 40, rect.right - e.clientX));
+        detail.style.width = w + 'px';
+      });
+      document.addEventListener('mouseup', () => {
+        if (!rdragging) return;
+        rdragging = false;
+        detail.classList.remove('dragging');
       });
     })();
 
