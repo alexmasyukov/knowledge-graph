@@ -1,31 +1,49 @@
-#!/usr/bin/env -S uv run python
+#!/usr/bin/env python3
 """Interactive control panel for knowledge-graph (SCIP + Memgraph + tree-sitter).
+
+Just run it any way you like — the script re-execs itself with the
+project's `.venv/bin/python` if it was launched outside the venv, so
+`python3 start.py`, `./start.py` and `uv run python start.py` all work.
+
+If `.venv` doesn't exist, run `uv sync` once and try again.
 
 Manages four side-processes (Memgraph + Memgraph Lab in Docker, the
 FastAPI core API, the optional file watcher) via PID files so they
 survive between menu sessions.
-
-Run either via uv (recommended — picks up the project venv automatically):
-
-    uv run python start.py
-
-…or, after `chmod +x start.py`, just:
-
-    ./start.py
 """
 
 from __future__ import annotations
 
-try:
-    import questionary
-except ModuleNotFoundError:
-    import sys
-    sys.stderr.write(
-        "knowledge-graph deps aren't on this interpreter.\n"
-        "  → run with `uv run python start.py` (or `./start.py` after `chmod +x`)\n"
-        "  → or `uv sync` if you've just cloned the repo.\n"
-    )
-    raise SystemExit(2)
+# ── auto-activate the project venv before importing anything else ──
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+
+def _ensure_venv_python() -> None:
+    """Re-exec ourselves under `.venv/bin/python` if we aren't already.
+    Boots `uv sync` once when the venv is missing — first-run friendly."""
+    repo = Path(__file__).resolve().parent
+    venv_py = repo / ".venv" / "bin" / "python"
+    if not venv_py.exists():
+        sys.stderr.write(
+            "[start.py] .venv missing — running `uv sync` to create it…\n"
+        )
+        try:
+            subprocess.run(["uv", "sync"], cwd=repo, check=True)
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            sys.stderr.write(
+                f"[start.py] uv sync failed: {e}\n"
+                "  install uv from https://docs.astral.sh/uv/ and retry.\n"
+            )
+            raise SystemExit(2) from e
+    if Path(sys.executable).resolve() == venv_py.resolve():
+        return
+    os.execv(str(venv_py), [str(venv_py), str(Path(__file__).resolve()), *sys.argv[1:]])
+
+
+_ensure_venv_python()
 
 from kg.menu.actions import (
     open_api_docs,
