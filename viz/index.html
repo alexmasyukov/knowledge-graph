@@ -61,13 +61,12 @@
     #filters {
       background: #232323;
       border-bottom: 1px solid #3a3a3a;
-      padding: 6px 12px;
+      padding: 4px 12px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
       align-items: center;
       font-size: 12px;
-      min-height: 32px;
     }
     #filters .filter-hint { color: #666; margin-right: 4px; }
     .filter-chip {
@@ -176,7 +175,7 @@
 </head>
 <body>
 
-  <div id="toolbar-wrap" style="height: 180px;">
+  <div id="toolbar-wrap" style="height: 96px;">
     <div id="toolbar">
       <div id="editor-cell">
         <textarea id="cypher">MATCH (r:Route {project: 'adsw'})-[:RENDERS]->(c:Component)
