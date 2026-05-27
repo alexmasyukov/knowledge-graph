@@ -356,6 +356,10 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
               'text-background-padding': '2px',
             }
           },
+          // Slash-y captions (paths) — render in a thinner, smaller font
+          // so a Route block isn't visually shouting next to a tight
+          // identifier like a GqlHook name.
+          { selector: 'node[label="Route"], node[label="File"]', style: { 'font-size': '10px', 'font-weight': 300 } },
           { selector: 'node:selected', style: { 'border-width': 3, 'border-color': '#3a7afe' } },
           { selector: 'edge:selected', style: { 'line-color': '#3a7afe', 'target-arrow-color': '#3a7afe', 'width': 2.5 } },
           { selector: '.hidden', style: { 'display': 'none' } },
