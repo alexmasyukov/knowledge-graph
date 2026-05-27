@@ -93,18 +93,24 @@
     #stage { display: flex; position: relative; flex: 1; min-height: 0; }
     #cy { flex: 1; }
 
-    /* Detail panel */
+    /* Detail panel — fixed overlay on the right, never reshapes the graph. */
     #detail {
+      position: fixed;
+      right: 0;
+      bottom: 0;
       width: 380px;
       max-width: 40vw;
       background: #232323;
       border-left: 1px solid #3a3a3a;
+      box-shadow: -4px 0 14px rgba(0,0,0,0.4);
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      transition: width 0.15s ease-out;
+      transform: translateX(0);
+      transition: transform 0.15s ease-out;
+      z-index: 50;
     }
-    #detail.collapsed { width: 0; border-left: none; }
+    #detail.collapsed { transform: translateX(100%); }
     #detail-header {
       padding: 10px 14px;
       border-bottom: 1px solid #3a3a3a;
@@ -253,6 +259,15 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
     let cmEditor = null;
     const visibleLabels = new Set();
 
+    // ── keep detail panel below toolbar+filters ─────────────────────
+    function syncDetailTop() {
+      const tw = document.getElementById('toolbar-wrap');
+      const f = document.getElementById('filters');
+      const top = (tw ? tw.offsetHeight : 0) + (f ? f.offsetHeight : 0);
+      document.getElementById('detail').style.top = top + 'px';
+    }
+    window.addEventListener('resize', syncDetailTop);
+
     // ── CodeMirror init ─────────────────────────────────────────────
     cmEditor = CodeMirror.fromTextArea(document.getElementById('cypher'), {
       mode: 'application/x-cypher-query',
@@ -284,6 +299,7 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
         const newH = Math.max(80, Math.min(window.innerHeight - 200, startH + (e.clientY - startY)));
         wrap.style.height = newH + 'px';
         if (cmEditor) cmEditor.refresh();
+        syncDetailTop();
       });
       document.addEventListener('mouseup', () => {
         if (!dragging) return;
@@ -547,7 +563,8 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
 
     window.addEventListener('DOMContentLoaded', () => {
       // Refresh CodeMirror after layout settles
-      setTimeout(() => cmEditor && cmEditor.refresh(), 50);
+      setTimeout(() => { cmEditor && cmEditor.refresh(); syncDetailTop(); }, 50);
+      syncDetailTop();
       run();
     });
   </script>
