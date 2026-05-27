@@ -364,8 +364,22 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
         layout: layoutConfig(layoutName),
       });
 
-      cy.on('tap', 'node', evt => openDetail(evt.target));
-      cy.on('tap', evt => { if (evt.target === cy) closeDetail(); });
+      // Single tap handler. evt.target is the cy instance on background,
+      // or a cytoscape collection (the node) otherwise. Splitting into
+      // two `.on('tap', 'node', …)` + `.on('tap', …)` listeners turned out
+      // to be flaky — the bg listener sometimes fired before the node
+      // one and immediately closed the panel.
+      cy.on('tap', evt => {
+        if (evt.target === cy) { closeDetail(); return; }
+        const t = evt.target;
+        if (t && typeof t.isNode === 'function' && t.isNode()) {
+          try { openDetail(t); }
+          catch (err) {
+            console.error('openDetail failed', err);
+            document.getElementById('status').textContent = 'detail panel error: ' + err.message;
+          }
+        }
+      });
 
       buildFilters(data.nodes);
     }
