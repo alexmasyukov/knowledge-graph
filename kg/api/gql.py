@@ -67,7 +67,7 @@ async def hook_info(name: str, project: str) -> dict:
         OPTIONAL MATCH (f:File)-[c:CALLS_HOOK]->(h)
         WITH h,
              collect(DISTINCT {symbol: op.name, gql_name: op.gql_name, kind: op.kind}) AS operations,
-             collect(DISTINCT {file: f.path, line: c.lines, count: c.count}) AS callers_raw
+             collect(DISTINCT {file: f.path, lines: c.lines, count: c.count}) AS callers_raw
         RETURN h.file AS file, h.line AS line,
                [o IN operations WHERE o.symbol IS NOT NULL] AS operations,
                callers_raw

@@ -29,12 +29,18 @@ from typing import Final
 from .base import Extractor, IndexerContext, IngestResult
 from .scip_loader import SymbolInfo, parse_symbol_path, short_symbol
 
-# Matches `gql\`\n  query GetX(...) {...\``  — captures kind + gql name.
-# Also handles `gql\` query GetX { ... \`` on one line. Multiline mode
-# so `^` anchors to the start of each line inside the template.
-_GQL_TAG_RX = re.compile(
-    r"gql\s*`\s*(?P<kind>query|mutation|subscription|fragment)\s+(?P<name>\w+)",
+# Matches the operation keyword + name inside a gql template literal,
+# regardless of leading `${FRAGMENT}` interpolations or whitespace.
+_GQL_OP_RX = re.compile(
+    r"(?P<kind>query|mutation|subscription|fragment)\s+(?P<name>\w+)",
     re.IGNORECASE,
+)
+
+# Matches the `(export) const NAME = gql\`...\`` declaration and captures the
+# whole template body (lazy `[^`]*?` is intentional — we'll search inside).
+_GQL_DECL_RX = re.compile(
+    r"(?:export\s+)?const\s+(?P<ts>[A-Z][A-Z0-9_]*)\s*=\s*gql\s*`(?P<body>[^`]*?)`",
+    re.DOTALL,
 )
 
 
@@ -43,23 +49,30 @@ def _gql_info_for_file(file_path: str) -> dict[str, tuple[str, str]]:
     """Map {ts_local_name → (kind, gql_name)} for every gql tagged
     template in a TS source file.
 
-    A file like:
+    Handles three layouts:
         export const GET_X = gql`query GetX { ... }`
         export const ADD_Y = gql`mutation AddY($i: ...) { ... }`
-    yields {"GET_X": ("query", "GetX"), "ADD_Y": ("mutation", "AddY")}.
+        export const GET_EDUCATION_BOOKINGS = gql`
+          ${CORE_FIELDS}
+          query GetEducationBookings { ... }
+        `
+    The last form prepends `${FRAGMENT}` interpolations before the keyword,
+    so a strict "must come first" regex misses it. We capture the entire
+    template body, then scan inside for the first keyword + name pair.
     """
     out: dict[str, tuple[str, str]] = {}
     try:
         text = Path(file_path).read_text(encoding="utf-8")
     except Exception:
         return out
-    # Find every `<ws>const <NAME> = gql\`<kind> <gql_name>` pair.
-    pattern = re.compile(
-        r"(?:export\s+)?const\s+(?P<ts>[A-Z][A-Z0-9_]*)\s*=\s*gql\s*`\s*(?P<kind>query|mutation|subscription|fragment)\s+(?P<gql>\w+)",
-        re.IGNORECASE,
-    )
-    for m in pattern.finditer(text):
-        out[m["ts"]] = (m["kind"].lower(), m["gql"])
+    for m in _GQL_DECL_RX.finditer(text):
+        body = m["body"]
+        # Strip ${...} interpolations so they don't confuse the search.
+        without_subs = re.sub(r"\$\{[^}]*\}", " ", body)
+        op = _GQL_OP_RX.search(without_subs)
+        if op is None:
+            continue
+        out[m["ts"]] = (op["kind"].lower(), op["name"])
     return out
 
 # Prefix of the package-relative file path that gates each kind.
