@@ -152,28 +152,11 @@
       color: #aaa; font-weight: 600;
     }
     #detail-body h4:first-child { margin-top: 0; }
-    .prop-list { font-family: 'SF Mono', Consolas, monospace; }
-    .prop {
-      padding: 6px 10px;
-      border-radius: 4px;
-      margin-bottom: 2px;
-    }
-    .prop:nth-child(odd) { background: #1d1d1d; }
-    .prop-key {
-      display: block;
-      color: #aaa;
-      font-size: 11px;
-      letter-spacing: 0.3px;
-      text-transform: uppercase;
-      margin-bottom: 3px;
-    }
-    .prop-value {
-      display: block;
-      color: #e8e8e8;
-      font-size: 13px;
-      word-break: break-word;
-      white-space: pre-wrap;
-    }
+    .prop-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
+    .prop-table td { padding: 5px 8px; vertical-align: top; word-break: break-word; }
+    .prop-table tr:nth-child(odd) { background: #1d1d1d; }
+    .prop-key { color: #aaa; width: 38%; }
+    .prop-value { color: #e8e8e8; }
     .neighbour {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 8px; border-radius: 4px; font-size: 13px;
@@ -561,13 +544,13 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
       if (keys.length === 0) {
         html += '<div class="empty-hint">no props</div>';
       } else {
-        html += '<div class="prop-list">';
+        html += '<table class="prop-table">';
         for (const k of keys) {
           const v = props[k];
           const text = Array.isArray(v) ? v.join(', ') : (v === null ? '∅' : String(v));
-          html += `<div class="prop"><span class="prop-key">${escapeHtml(k)}</span><span class="prop-value">${escapeHtml(text)}</span></div>`;
+          html += `<tr><td class="prop-key">${escapeHtml(k)}</td><td class="prop-value">${escapeHtml(text)}</td></tr>`;
         }
-        html += '</div>';
+        html += '</table>';
       }
 
       html += `<h4>Outgoing (${out.length})</h4>`;
