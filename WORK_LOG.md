@@ -108,6 +108,20 @@ Likely candidates from the conversation:
 - guard-with-roles propagation — runtime permission checks inside forms
 - Network project's twin conventions (same patterns, different shells)
 
+### JSX composition extractor
+
+Big gap surfaced while testing viz: the graph knows Route→Component and
+the gql chain, but not which sub-components live inside a Component's
+JSX. Asking "everything on the page partner/distroApplications" doesn't
+return `ItemPageLayout`, `KendoTable`, or any shared layout components.
+
+Design note: `arenadata-adsw/mcp/jsx-composition-extractor.md`.
+Short version — walk every `.tsx` under `src/`, find capitalized JSX
+tags, resolve identifiers via SCIP, emit `Component -[:RENDERS]-> Component`
+and create Component nodes for every PascalCase TSX file (not just the
+ones in `src/pages/`). Expected growth on adsw: ~700 Component, ~2000
+RENDERS edges.
+
 ### True per-file incremental indexing
 Currently `/reindex?since=…` short-circuits when nothing changed.
 When something does change, we still rerun the full SCIP + all
