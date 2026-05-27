@@ -1,16 +1,31 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run python
 """Interactive control panel for knowledge-graph (SCIP + Memgraph + tree-sitter).
 
 Manages four side-processes (Memgraph + Memgraph Lab in Docker, the
 FastAPI core API, the optional file watcher) via PID files so they
 survive between menu sessions.
 
+Run either via uv (recommended — picks up the project venv automatically):
+
     uv run python start.py
+
+…or, after `chmod +x start.py`, just:
+
+    ./start.py
 """
 
 from __future__ import annotations
 
-import questionary
+try:
+    import questionary
+except ModuleNotFoundError:
+    import sys
+    sys.stderr.write(
+        "knowledge-graph deps aren't on this interpreter.\n"
+        "  → run with `uv run python start.py` (or `./start.py` after `chmod +x`)\n"
+        "  → or `uv sync` if you've just cloned the repo.\n"
+    )
+    raise SystemExit(2)
 
 from kg.menu.actions import (
     open_api_docs,
