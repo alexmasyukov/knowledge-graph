@@ -22,7 +22,13 @@ _VIZ_HTML = Path(__file__).parent.parent.parent / "viz" / "index.html"
 async def viz_page() -> FileResponse:
     if not _VIZ_HTML.exists():
         raise HTTPException(500, f"viz/index.html missing at {_VIZ_HTML}")
-    return FileResponse(_VIZ_HTML, media_type="text/html")
+    # No cache — viz/index.html is iterated on; users hitting an old
+    # version because the browser cached it caused real confusion.
+    return FileResponse(
+        _VIZ_HTML,
+        media_type="text/html",
+        headers={"Cache-Control": "no-store, must-revalidate"},
+    )
 
 
 @router.get("/graph")
