@@ -41,9 +41,12 @@ _IGNORE_NAMES = {".DS_Store", "Thumbs.db", ".gitkeep"}
 
 
 def _is_component_file(file: Path) -> bool:
+    """A "component" is a PascalCase .tsx file. PascalCase .ts files are
+    typically constants / types / helpers (e.g. Constants.ts) — drop them
+    to avoid the false-positive a name-only check produces."""
     return (
         file.is_file()
-        and file.suffix in {".tsx", ".ts"}
+        and file.suffix == ".tsx"
         and bool(_COMPONENT_NAME_RX.match(file.stem))
     )
 

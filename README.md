@@ -54,17 +54,49 @@ Requires: Python 3.12+, Node 20+, pnpm, Docker, [uv](https://docs.astral.sh/uv/)
 # 1. Pin the SCIP TypeScript indexer
 cd scip-indexer && pnpm install && cd ..
 
-# 2. Bring up Memgraph
-docker compose up -d memgraph
-
-# 3. Configure projects (one PROJECT_<NAME> entry per indexed package)
+# 2. Configure projects (one PROJECT_<NAME> entry per indexed package)
 cp .env.example .env
 $EDITOR .env
 
-# 4. Run the API
-uv run uvicorn kg.server:app --host 127.0.0.1 --port 7400
+# 3. Launch the control panel — handles everything from here
+uv run python start.py
+```
 
-# 5. Index a project
+### Control panel
+
+`start.py` opens an interactive menu (rich + questionary) that:
+
+```
+╭─── knowledge-graph ──────────────────────────────────────────────╮
+│  Memgraph      ● healthy   bolt://localhost:7687     bolt        │
+│  Memgraph Lab  ● healthy   http://localhost:3000     browser     │
+│  Core API      ● running   http://127.0.0.1:7400/…   pid=87041   │
+│  Watcher       ● stopped   —                         pid=—       │
+│                                                                  │
+│  Viz           http://127.0.0.1:7400/viz/                        │
+│  Projects      adsw                                              │
+╰──────────────────────────────────────────────────────────────────╯
+› What now?
+  ❯ Start all
+    Stop all
+    Restart all
+    Reindex project
+    Sanity probes
+    Run tests
+    Start watcher / Stop watcher
+    Tail logs
+    Open Memgraph Lab / API docs / graph viewer
+```
+
+Every service is tracked via a PID file under `.run/`, so they survive
+between menu sessions. The `blocked` row colour means our port is held
+by a foreign process — the menu prints the PID and how to kill it.
+
+### Manual mode (if you don't want the menu)
+
+```bash
+docker compose up -d memgraph memgraph-lab
+uv run uvicorn kg.server:app --host 127.0.0.1 --port 7400
 curl -X POST 'http://127.0.0.1:7400/reindex?project=adsw'
 ```
 

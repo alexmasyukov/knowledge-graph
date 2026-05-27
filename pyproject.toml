@@ -14,6 +14,8 @@ dependencies = [
   "tree-sitter>=0.23",
   "tree-sitter-language-pack>=0.4",
   "watchdog>=4.0",      # filesystem trigger for incremental reindex
+  "questionary>=2.0",   # start.py menu
+  "rich>=13.7",         # start.py status table
 ]
 
 [dependency-groups]
