@@ -165,7 +165,8 @@
     .prop-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
     .prop-table td { padding: 5px 8px; vertical-align: top; word-break: break-word; }
     .prop-table tr:nth-child(odd) { background: #1d1d1d; }
-    .prop-key { color: #aaa; width: 38%; }
+    /* Key column hugs its longest entry; value column takes the rest. */
+    .prop-key { color: #aaa; white-space: nowrap; width: 1%; }
     .prop-value { color: #e8e8e8; }
     .neighbour {
       display: flex; align-items: center; gap: 8px;
