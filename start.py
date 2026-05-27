@@ -45,6 +45,8 @@ def _ensure_venv_python() -> None:
 
 _ensure_venv_python()
 
+import questionary
+
 from kg.menu.actions import (
     open_api_docs,
     open_lab,
