@@ -3,41 +3,223 @@
 <head>
   <meta charset="UTF-8">
   <title>kg — graph viewer</title>
+
+  <!-- cytoscape -->
   <script src="https://unpkg.com/cytoscape@3.30.0/dist/cytoscape.min.js"></script>
   <script src="https://unpkg.com/dagre@0.8.5/dist/dagre.min.js"></script>
   <script src="https://unpkg.com/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+
+  <!-- CodeMirror 5 with Cypher mode + dark theme -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/theme/material-darker.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/cypher/cypher.min.js"></script>
+
   <style>
-    html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #1e1e1e; color: #e0e0e0; }
-    #toolbar { padding: 8px 12px; background: #2a2a2a; border-bottom: 1px solid #3a3a3a; display: flex; gap: 8px; align-items: stretch; }
-    #toolbar textarea { flex: 1; background: #1a1a1a; color: #e0e0e0; border: 1px solid #444; border-radius: 4px; padding: 6px 8px; font-family: 'SF Mono', Consolas, monospace; font-size: 12px; resize: vertical; min-height: 60px; }
-    #toolbar button, #toolbar select { background: #3a7afe; color: white; border: 0; padding: 0 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
-    #toolbar select { background: #333; }
-    #toolbar button:hover { background: #2966dd; }
-    #cy { width: 100%; height: calc(100vh - 96px); }
-    #legend { position: fixed; bottom: 12px; right: 12px; background: rgba(40,40,40,0.92); padding: 8px 12px; border-radius: 6px; font-size: 11px; line-height: 1.6; }
-    #legend .swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 6px; }
-    #status { position: fixed; top: 100px; left: 12px; background: rgba(40,40,40,0.92); padding: 6px 10px; border-radius: 4px; font-size: 11px; }
+    html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #1e1e1e; color: #e0e0e0; overflow: hidden; }
+
+    /* ── toolbar — resizable in height ───────────────────────────── */
+    #toolbar-wrap { background: #2a2a2a; border-bottom: 1px solid #3a3a3a; display: flex; flex-direction: column; }
+    #toolbar { padding: 10px 12px; display: flex; gap: 10px; align-items: stretch; min-height: 0; flex: 1; }
+    #editor-cell { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .CodeMirror {
+      height: 100% !important;
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 14px;
+      line-height: 1.45;
+      border-radius: 4px;
+      border: 1px solid #444;
+    }
+    .CodeMirror.cm-s-material-darker { background: #1a1a1a; }
+    .controls-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 180px;
+    }
+    .controls-cell select, .controls-cell button {
+      background: #3a7afe; color: white; border: 0; padding: 8px 14px;
+      border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500;
+    }
+    .controls-cell select { background: #333; }
+    .controls-cell button:hover { background: #2966dd; }
+    .controls-cell button.run { font-size: 14px; padding: 10px 16px; }
+
+    /* Drag handle for resize */
+    #toolbar-resize {
+      height: 6px;
+      background: linear-gradient(to bottom, #2a2a2a, #2a2a2a 2px, #3a3a3a 2px, #3a3a3a 4px, #2a2a2a 4px);
+      cursor: ns-resize;
+      user-select: none;
+      flex: 0 0 auto;
+    }
+    #toolbar-resize:hover { background-color: #3a3a3a; }
+
+    /* ── filters strip ─────────────────────────────────────────────── */
+    #filters {
+      background: #232323;
+      border-bottom: 1px solid #3a3a3a;
+      padding: 6px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+      min-height: 32px;
+    }
+    #filters .filter-hint { color: #666; margin-right: 4px; }
+    .filter-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 9px; border-radius: 12px; cursor: pointer;
+      font-size: 11px; font-weight: 500;
+      color: #1a1a1a;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+    .filter-chip.off { opacity: 0.32; background: #444 !important; color: #888; }
+    .filter-chip:hover { border-color: #fff; }
+    .filter-chip .chip-count { font-weight: 400; opacity: 0.7; }
+    #filters .filter-actions {
+      margin-left: auto; display: flex; gap: 6px;
+    }
+    #filters .filter-actions button {
+      background: transparent; color: #888; border: 1px solid #444;
+      padding: 2px 8px; border-radius: 12px; cursor: pointer; font-size: 11px;
+    }
+    #filters .filter-actions button:hover { color: #e0e0e0; border-color: #666; }
+
+    /* ── stage ─────────────────────────────────────────────────────── */
+    #stage { display: flex; position: relative; flex: 1; min-height: 0; }
+    #cy { flex: 1; }
+
+    /* Detail panel */
+    #detail {
+      width: 380px;
+      max-width: 40vw;
+      background: #232323;
+      border-left: 1px solid #3a3a3a;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: width 0.15s ease-out;
+    }
+    #detail.collapsed { width: 0; border-left: none; }
+    #detail-header {
+      padding: 10px 14px;
+      border-bottom: 1px solid #3a3a3a;
+      display: flex; align-items: center; gap: 8px;
+      flex: 0 0 auto;
+    }
+    #detail-label {
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 3px;
+    }
+    #detail-caption {
+      font-family: 'SF Mono', Consolas, monospace;
+      font-size: 13px;
+      color: #e0e0e0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    #detail-close {
+      background: transparent; color: #888; border: 0;
+      cursor: pointer; padding: 4px 8px; border-radius: 3px;
+      font-size: 18px; line-height: 1;
+    }
+    #detail-close:hover { background: #3a3a3a; color: #e0e0e0; }
+    #detail-body {
+      padding: 12px 14px; overflow-y: auto; flex: 1; font-size: 12px;
+    }
+    #detail-body h4 {
+      margin: 14px 0 6px 0; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.5px;
+      color: #888; font-weight: 500;
+    }
+    #detail-body h4:first-child { margin-top: 0; }
+    .prop-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Consolas, monospace; font-size: 11px; }
+    .prop-table td { padding: 3px 6px; vertical-align: top; word-break: break-word; }
+    .prop-table tr:nth-child(odd) { background: #1d1d1d; }
+    .prop-key { color: #888; width: 40%; }
+    .prop-value { color: #e0e0e0; }
+    .neighbour {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 6px; border-radius: 3px; font-size: 11px;
+      cursor: pointer; margin: 1px 0;
+    }
+    .neighbour:hover { background: #2c2c2c; }
+    .neighbour .arrow { color: #555; font-family: monospace; font-size: 10px; }
+    .neighbour .rel { color: #888; font-size: 10px; }
+    .neighbour .target-label {
+      color: #1a1a1a; padding: 1px 5px; border-radius: 2px;
+      font-size: 10px; font-weight: 600;
+    }
+    .neighbour .target-caption {
+      color: #e0e0e0; flex: 1; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap;
+    }
+    .empty-hint { color: #555; font-style: italic; padding: 8px 0; }
+
+    #status {
+      position: fixed; bottom: 12px; left: 12px;
+      background: rgba(40,40,40,0.92); padding: 6px 10px;
+      border-radius: 4px; font-size: 11px;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
-  <div id="toolbar">
-    <textarea id="cypher" placeholder="Cypher query…">MATCH (r:Route {project: 'adsw'})-[:RENDERS]->(c:Component)
+
+  <div id="toolbar-wrap" style="height: 180px;">
+    <div id="toolbar">
+      <div id="editor-cell">
+        <textarea id="cypher">MATCH (r:Route {project: 'adsw'})-[:RENDERS]->(c:Component)
 WHERE r.path STARTS WITH '/services/store-products/bundles'
 OPTIONAL MATCH (r)-[:REQUIRES]->(p:Permission)
 OPTIONAL MATCH (c)-[:CALLS_HOOK]->(h:GqlHook)-[:WRAPS]->(op:GqlOperation)
 RETURN r, c, p, h, op LIMIT 200</textarea>
-    <select id="layout">
-      <option value="dagre">dagre (hierarchical)</option>
-      <option value="cose">cose (force-directed)</option>
-      <option value="breadthfirst">breadth-first</option>
-      <option value="grid">grid</option>
-      <option value="circle">circle</option>
-    </select>
-    <button onclick="run()">Run ⏵</button>
+      </div>
+      <div class="controls-cell">
+        <select id="layout">
+          <option value="dagre">dagre (hierarchical)</option>
+          <option value="cose">cose (force-directed)</option>
+          <option value="breadthfirst">breadth-first</option>
+          <option value="grid">grid</option>
+          <option value="circle">circle</option>
+        </select>
+        <button class="run" onclick="run()">Run ⏵</button>
+        <div style="color: #555; font-size: 10px; text-align: center; margin-top: 4px;">⌘/Ctrl + Enter</div>
+      </div>
+    </div>
+    <div id="toolbar-resize" title="Drag to resize"></div>
   </div>
-  <div id="cy"></div>
+
+  <div id="filters">
+    <span class="filter-hint">filters:</span>
+    <div id="filter-chips" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+    <div class="filter-actions">
+      <button onclick="allFiltersOn()">all</button>
+      <button onclick="allFiltersOff()">none</button>
+    </div>
+  </div>
+
+  <div id="stage">
+    <div id="cy"></div>
+    <aside id="detail" class="collapsed">
+      <div id="detail-header">
+        <span id="detail-label"></span>
+        <span id="detail-caption"></span>
+        <button id="detail-close" onclick="closeDetail()" title="Close (Esc)">×</button>
+      </div>
+      <div id="detail-body"></div>
+    </aside>
+  </div>
+
   <div id="status"></div>
-  <div id="legend"></div>
 
   <script>
     // Per-label colour palette — distinct, reasonable on dark bg.
@@ -47,6 +229,7 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
       Page: '#c586c0',
       Permission: '#f48771',
       Guard: '#ce9178',
+      Role: '#bb7eb8',
       GqlHook: '#9cdcfe',
       GqlOperation: '#569cd6',
       File: '#808080',
@@ -57,22 +240,58 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
       Doc: '#a0a0a0',
       Domain: '#c678dd',
       ScssModule: '#56b6c2',
+      ScssClass: '#6ec6cf',
+      Type: '#e8a87c',
+      Project: '#666666',
     };
     const DEFAULT_COLOR = '#888';
-
-    function colour(label) { return PALETTE[label] || DEFAULT_COLOR; }
-
-    function buildLegend(labels) {
-      const el = document.getElementById('legend');
-      el.innerHTML = labels.map(l =>
-        `<div><span class="swatch" style="background:${colour(l)}"></span>${l}</div>`
-      ).join('');
-    }
+    const colour = label => PALETTE[label] || DEFAULT_COLOR;
 
     let cy = null;
+    let cmEditor = null;
+    const visibleLabels = new Set();
 
+    // ── CodeMirror init ─────────────────────────────────────────────
+    cmEditor = CodeMirror.fromTextArea(document.getElementById('cypher'), {
+      mode: 'application/x-cypher-query',
+      theme: 'material-darker',
+      lineNumbers: true,
+      lineWrapping: true,
+      tabSize: 2,
+      indentWithTabs: false,
+      autofocus: true,
+      extraKeys: {
+        'Cmd-Enter': run,
+        'Ctrl-Enter': run,
+        Tab: cm => cm.replaceSelection('  ', 'end'),
+      },
+    });
+
+    // ── toolbar resize ──────────────────────────────────────────────
+    (function setupResize() {
+      const handle = document.getElementById('toolbar-resize');
+      const wrap = document.getElementById('toolbar-wrap');
+      let dragging = false, startY = 0, startH = 0;
+      handle.addEventListener('mousedown', e => {
+        dragging = true; startY = e.clientY; startH = wrap.offsetHeight;
+        document.body.style.cursor = 'ns-resize';
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const newH = Math.max(80, Math.min(window.innerHeight - 200, startH + (e.clientY - startY)));
+        wrap.style.height = newH + 'px';
+        if (cmEditor) cmEditor.refresh();
+      });
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false; document.body.style.cursor = '';
+      });
+    })();
+
+    // ── run query ───────────────────────────────────────────────────
     async function run() {
-      const cypher = document.getElementById('cypher').value;
+      const cypher = cmEditor.getValue();
       const layout = document.getElementById('layout').value;
       const status = document.getElementById('status');
       status.textContent = 'Loading…';
@@ -85,15 +304,13 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
         const data = await resp.json();
         renderGraph(data, layout);
         status.textContent = `${data.nodes.length} nodes · ${data.edges.length} edges`;
+        closeDetail();
       } catch (e) {
         status.textContent = 'Error: ' + e.message;
       }
     }
 
     function renderGraph(data, layoutName) {
-      const labels = [...new Set(data.nodes.map(n => n.data.label))];
-      buildLegend(labels);
-
       if (cy) cy.destroy();
 
       cy = cytoscape({
@@ -138,20 +355,17 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
               'text-background-padding': '2px',
             }
           },
-          {
-            selector: 'node:selected',
-            style: { 'border-width': 3, 'border-color': '#3a7afe' }
-          }
+          { selector: 'node:selected', style: { 'border-width': 3, 'border-color': '#3a7afe' } },
+          { selector: 'edge:selected', style: { 'line-color': '#3a7afe', 'target-arrow-color': '#3a7afe', 'width': 2.5 } },
+          { selector: '.hidden', style: { 'display': 'none' } },
         ],
         layout: layoutConfig(layoutName),
       });
 
-      // Click → print full props in status bar
-      cy.on('tap', 'node', evt => {
-        const n = evt.target.data();
-        const propStr = Object.entries(n.props).slice(0, 6).map(([k, v]) => `${k}=${v}`).join(' · ');
-        document.getElementById('status').textContent = `${n.label}  ${n.caption}  [${propStr}]`;
-      });
+      cy.on('tap', 'node', evt => openDetail(evt.target));
+      cy.on('tap', evt => { if (evt.target === cy) closeDetail(); });
+
+      buildFilters(data.nodes);
     }
 
     function layoutConfig(name) {
@@ -161,12 +375,151 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
       return { name };
     }
 
-    // Auto-run on page load.
-    window.addEventListener('DOMContentLoaded', run);
+    // ── filters ─────────────────────────────────────────────────────
+    function buildFilters(nodes) {
+      const counts = {};
+      nodes.forEach(n => { counts[n.data.label] = (counts[n.data.label] || 0) + 1; });
+      const labels = Object.keys(counts).sort();
 
-    // Cmd/Ctrl+Enter in textarea → run
-    document.getElementById('cypher').addEventListener('keydown', e => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); run(); }
+      visibleLabels.clear();
+      labels.forEach(l => visibleLabels.add(l));
+
+      const wrap = document.getElementById('filter-chips');
+      wrap.innerHTML = labels.map(l => {
+        return `<span class="filter-chip" data-label="${l}" style="background:${colour(l)}">
+          ${l} <span class="chip-count">${counts[l]}</span>
+        </span>`;
+      }).join('');
+
+      wrap.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.addEventListener('click', () => toggleLabel(chip.dataset.label));
+      });
+    }
+
+    function toggleLabel(label) {
+      if (visibleLabels.has(label)) visibleLabels.delete(label);
+      else visibleLabels.add(label);
+      applyFilters();
+    }
+
+    function applyFilters() {
+      if (!cy) return;
+      cy.batch(() => {
+        cy.nodes().forEach(n => {
+          if (visibleLabels.has(n.data('label'))) n.removeClass('hidden');
+          else n.addClass('hidden');
+        });
+        cy.edges().forEach(e => {
+          if (e.source().hasClass('hidden') || e.target().hasClass('hidden')) e.addClass('hidden');
+          else e.removeClass('hidden');
+        });
+      });
+      // Update chip visuals
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        chip.classList.toggle('off', !visibleLabels.has(chip.dataset.label));
+      });
+    }
+
+    function allFiltersOn() {
+      document.querySelectorAll('.filter-chip').forEach(c => visibleLabels.add(c.dataset.label));
+      applyFilters();
+    }
+    function allFiltersOff() {
+      visibleLabels.clear();
+      applyFilters();
+    }
+
+    // ── detail panel ───────────────────────────────────────────────
+    function openDetail(node) {
+      const data = node.data();
+      const detail = document.getElementById('detail');
+      detail.classList.remove('collapsed');
+
+      const labelEl = document.getElementById('detail-label');
+      labelEl.textContent = data.label;
+      labelEl.style.background = colour(data.label);
+      labelEl.style.color = '#1a1a1a';
+      document.getElementById('detail-caption').textContent = data.caption;
+
+      const body = document.getElementById('detail-body');
+      const props = data.props || {};
+      const out = node.outgoers('edge');
+      const inc = node.incomers('edge');
+
+      let html = '<h4>Properties</h4>';
+      const keys = Object.keys(props).sort();
+      if (keys.length === 0) {
+        html += '<div class="empty-hint">no props</div>';
+      } else {
+        html += '<table class="prop-table">';
+        for (const k of keys) {
+          const v = props[k];
+          const text = Array.isArray(v) ? v.join(', ') : (v === null ? '∅' : String(v));
+          html += `<tr><td class="prop-key">${escapeHtml(k)}</td><td class="prop-value">${escapeHtml(text)}</td></tr>`;
+        }
+        html += '</table>';
+      }
+
+      html += `<h4>Outgoing (${out.length})</h4>`;
+      html += out.length === 0 ? '<div class="empty-hint">none in current graph</div>' : renderNeighbours(out, 'out');
+
+      html += `<h4>Incoming (${inc.length})</h4>`;
+      html += inc.length === 0 ? '<div class="empty-hint">none in current graph</div>' : renderNeighbours(inc, 'in');
+
+      body.innerHTML = html;
+
+      body.querySelectorAll('.neighbour').forEach(el => {
+        const targetId = el.dataset.targetId;
+        el.addEventListener('click', () => {
+          const target = cy.getElementById(targetId);
+          if (target.length) {
+            cy.elements().unselect();
+            target.select();
+            cy.animate({ center: { eles: target }, zoom: cy.zoom() }, { duration: 250 });
+            openDetail(target);
+          }
+        });
+      });
+    }
+
+    function renderNeighbours(edges, direction) {
+      const rows = [];
+      edges.forEach(edge => {
+        const target = direction === 'out' ? edge.target() : edge.source();
+        const targetData = target.data();
+        const arrow = direction === 'out' ? '→' : '←';
+        const colourBg = colour(targetData.label);
+        rows.push(
+          `<div class="neighbour" data-target-id="${escapeHtml(targetData.id)}">
+            <span class="arrow">${arrow}</span>
+            <span class="rel">${escapeHtml(edge.data('label') || '')}</span>
+            <span class="target-label" style="background:${colourBg}">${escapeHtml(targetData.label)}</span>
+            <span class="target-caption">${escapeHtml(targetData.caption || '')}</span>
+          </div>`
+        );
+      });
+      return rows.join('');
+    }
+
+    function closeDetail() {
+      document.getElementById('detail').classList.add('collapsed');
+      if (cy) cy.elements().unselect();
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeDetail();
+    });
+
+    window.addEventListener('DOMContentLoaded', () => {
+      // Refresh CodeMirror after layout settles
+      setTimeout(() => cmEditor && cmEditor.refresh(), 50);
+      run();
     });
   </script>
 </body>
