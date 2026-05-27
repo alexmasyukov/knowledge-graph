@@ -335,6 +335,7 @@ class ExtractorRun(BaseModel):
     edges: int = 0
     duration_ms: int = 0
     error: str | None = None
+    stage: str | None = None
 
 
 class ReindexResponse(BaseModel):
@@ -343,3 +344,4 @@ class ReindexResponse(BaseModel):
     scip_duration_ms: int
     total_duration_ms: int
     extractors: list[ExtractorRun] = Field(default_factory=list)
+    conventions: list[ExtractorRun] = Field(default_factory=list)
