@@ -371,10 +371,11 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
     }
 
     function layoutConfig(name) {
-      if (name === 'dagre') return { name: 'dagre', rankDir: 'LR', nodeSep: 30, rankSep: 80 };
-      if (name === 'cose') return { name: 'cose', animate: false, nodeRepulsion: 6000, idealEdgeLength: 120 };
-      if (name === 'breadthfirst') return { name: 'breadthfirst', directed: true, spacingFactor: 1.4 };
-      return { name };
+      const common = { fit: true, padding: 30, animate: false };
+      if (name === 'dagre') return { ...common, name: 'dagre', rankDir: 'LR', nodeSep: 80, rankSep: 120, ranker: 'tight-tree' };
+      if (name === 'cose') return { ...common, name: 'cose', nodeRepulsion: 8000, idealEdgeLength: 140 };
+      if (name === 'breadthfirst') return { ...common, name: 'breadthfirst', directed: true, spacingFactor: 1.6 };
+      return { ...common, name };
     }
 
     // ── filters ─────────────────────────────────────────────────────
