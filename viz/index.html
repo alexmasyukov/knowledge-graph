@@ -214,6 +214,7 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
           <option value="circle">circle</option>
         </select>
         <button class="run" onclick="run()">Run ⏵</button>
+        <button onclick="exportPng()" style="background: #333;">Save PNG ⬇</button>
         <div style="color: #555; font-size: 10px; text-align: center; margin-top: 4px;">⌘/Ctrl + Enter</div>
       </div>
     </div>
@@ -348,11 +349,53 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
         detail.style.width = w + 'px';
       });
       document.addEventListener('mouseup', () => {
-        if (!rdragging) return;
-        rdragging = false;
-        detail.classList.remove('dragging');
+        if (rdragging) {
+          rdragging = false;
+          detail.classList.remove('dragging');
+          persistDetailGeometry();
+        }
+        if (detailDragged) persistDetailGeometry();
       });
+
+      restoreDetailGeometry();
     })();
+
+    // ── persistence ─────────────────────────────────────────────────
+    const DETAIL_LS_KEY = 'kg-viz.detail-geom';
+
+    function persistDetailGeometry() {
+      const d = document.getElementById('detail');
+      const rect = d.getBoundingClientRect();
+      const geom = {
+        width: rect.width,
+        // Store position as a (right, top) tuple if anchored right,
+        // (left, top) if user dragged. detailDragged flag tells us which.
+        dragged: detailDragged,
+        right: window.innerWidth - rect.right,
+        left: rect.left,
+        top: rect.top,
+      };
+      try { localStorage.setItem(DETAIL_LS_KEY, JSON.stringify(geom)); } catch {}
+    }
+
+    function restoreDetailGeometry() {
+      let geom;
+      try { geom = JSON.parse(localStorage.getItem(DETAIL_LS_KEY) || 'null'); } catch { return; }
+      if (!geom) return;
+      const d = document.getElementById('detail');
+      if (geom.width) d.style.width = geom.width + 'px';
+      d.style.maxWidth = 'none';
+      if (geom.dragged) {
+        detailDragged = true;
+        d.style.left = geom.left + 'px';
+        d.style.right = 'auto';
+        d.style.top = geom.top + 'px';
+      } else {
+        d.style.right = (geom.right || 12) + 'px';
+        d.style.left = 'auto';
+        // top stays synced via syncDetailTop()
+      }
+    }
 
     // ── CodeMirror init ─────────────────────────────────────────────
     cmEditor = CodeMirror.fromTextArea(document.getElementById('cypher'), {
@@ -495,6 +538,24 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
       });
 
       buildFilters(data.nodes);
+    }
+
+    function exportPng() {
+      if (!cy) return;
+      try {
+        const blob = cy.png({ output: 'blob', full: true, scale: 2, bg: '#1e1e1e' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        a.href = url;
+        a.download = `kg-graph-${ts}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        document.getElementById('status').textContent = 'PNG export failed: ' + e.message;
+      }
     }
 
     function layoutConfig(name) {

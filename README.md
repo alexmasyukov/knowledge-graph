@@ -109,32 +109,46 @@ curl -X POST 'http://127.0.0.1:7400/reindex?project=adsw'
        .scip file        ┌──────────────────────┐
             │            │ routes / permissions │
             ▼            │ pages / e2e / scss   │
-     ┌──────────────┐    │ docs / types        │
+     ┌──────────────┐    │ docs / types         │
      │ ScipIndex    │◄───┘                      │
-     │ extractors   │  ─►   Memgraph (Bolt)
-     └──────────────┘
-            │
-            ▼
-       FastAPI ──► MCP wrapper ──► chat tools
-            │
+     │ extractors   │  ─►   Memgraph (Bolt)     │
+     └──────────────┘                           │
+            │                                   │
+            ▼                                   │
+     ┌──────────────┐                           │
+     │ conventions  │  ◄── semantic overlay     │
+     │ (rules)      │      page_data_provider…  │
+     └──────────────┘                           │
+            │                                   │
+            ▼                                   │
+       FastAPI ──► MCP wrapper ──► chat tools   │
+            │                                   │
             └──────► /viz (cytoscape) ──► browser
 ```
 
-Each extractor is a `kg/indexers/<name>.py` module that exposes an
-`EXTRACTOR` singleton conforming to the `Extractor` Protocol.
+Each **extractor** is a `kg/indexers/<name>.py` module that exposes an
+`EXTRACTOR` singleton conforming to the `Extractor` Protocol. Records
+structural facts (Route exists, hook calls operation, …).
+
+Each **convention** is a `kg/indexers/conventions/<name>.py` module that
+runs AFTER all extractors and encodes project-wide semantic patterns
+that aren't directly visible to plain code indexing (e.g. JSX wrappers
+that propagate data via props). See `kg/indexers/conventions/page_data_provider.py`
+for the reference implementation.
 
 ## What's indexed
 
-| Extractor | Source | Nodes / edges (adsw) |
-|---|---|---|
-| `gql` | SCIP refs in `src/gql/**` | 202 GqlOperation, 93 GqlHook |
-| `routes` | tree-sitter on `src/router/index.tsx` | 101 Route, 61 Component, 2 Guard, 30 Permission |
-| `permissions` | tree-sitter on `src/common/permissions/index.ts` | 135 Permission, 7 Role |
-| `pages` | filesystem walk of `src/pages/<domain>/<entity>/` | 56 Page, 95 Component |
-| `e2e` | tree-sitter on `src/**/*.tsx` + `playwright/tests/` | 187 TestId, 3 E2eSpec |
-| `scss` | tree-sitter on `*.module.scss` | 22 ScssModule, 67 ScssClass |
-| `docs` | tree-sitter on README/CLAUDE/mcp/docs `.md` | per repo |
-| `types` | tree-sitter on `src/types/**/*.ts` + SCIP refs | 114 Type, 1370 USES_TYPE |
+| Stage | Module | Source | Nodes / edges (adsw) |
+|---|---|---|---|
+| extractor | `gql` | SCIP refs in `src/gql/**` | 202 GqlOperation, 93 GqlHook |
+| extractor | `routes` | tree-sitter on `src/router/index.tsx` | 101 Route, 61 Component, 2 Guard, 30 Permission |
+| extractor | `permissions` | tree-sitter on `src/common/permissions/index.ts` | 135 Permission, 7 Role |
+| extractor | `pages` | filesystem walk of `src/pages/<domain>/<entity>/` | 56 Page, 95 Component |
+| extractor | `e2e` | tree-sitter on `src/**/*.tsx` + `playwright/tests/` | 187 TestId, 3 E2eSpec |
+| extractor | `scss` | tree-sitter on `*.module.scss` | 22 ScssModule, 67 ScssClass |
+| extractor | `docs` | tree-sitter on README/CLAUDE/mcp/docs `.md` | per repo |
+| extractor | `types` | tree-sitter on `src/types/**/*.ts` + SCIP refs | 114 Type, 1370 USES_TYPE |
+| convention | `page_data_provider` | JSX `<PageDataProvider dataLoaderHook={X}>` | 28 PageDataProviderHook |
 
 ## HTTP API
 
@@ -184,13 +198,27 @@ GET   /viz/graph?cypher=…       — JSON elements payload
 `/viz/graph?cypher=...` endpoint. Memgraph syntax (`id(n)` not
 `elementId(n)`), read-only queries only.
 
+Features:
+- CodeMirror Cypher editor with line numbers, ⌘/Ctrl+Enter to run
+- Layouts: dagre / cose / breadthfirst / grid / circle
+- Per-label filter chips (toggle node types in/out of the canvas)
+- Click any node → floating detail panel in the top-right with all
+  props + outgoing/incoming neighbours (clickable to navigate)
+- Panel is draggable (header) and width-resizable (left edge); size +
+  position remembered in localStorage
+- **Save PNG ⬇** — exports the current canvas as a 2× resolution PNG
+
 A quick demo query:
 
+```cypher
+MATCH (c:Component {project: 'adsw', name: 'DistroApplication'})
+MATCH (c)-[*1..4]->(n)
+WHERE NOT n:Project
+RETURN c, n
 ```
-MATCH (r:Route {project:'adsw', path:'/services/education/booking'})
-OPTIONAL MATCH (r)-[*1..2]-(n)
-RETURN r, n
-```
+
+This pulls the full forward dependency chain from a Component all the
+way through `PageDataProviderHook → GqlHook → GqlOperation`.
 
 ## Sanity probes
 

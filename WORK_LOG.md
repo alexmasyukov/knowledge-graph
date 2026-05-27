@@ -12,129 +12,147 @@ Replace the legacy stack with a professional foundation:
    maintains.
 2. **Memgraph** instead of Neo4j Community — drop-in Bolt-compatible
    replacement, faster, no licence ceiling.
-3. **Sourcegraph self-hosted** for code search/refs UI (optional layer
-   on top — still pending, see below).
-4. **Incremental indexing** by file diff (watchdog/git diff) — pending.
-5. **Tree-sitter** for SCSS / Markdown / e2e / JSX trees / TypeScript
-   declarations instead of regex.
+3. **Sourcegraph self-hosted** for code search/refs UI (optional layer).
+4. **Incremental indexing** by file diff (watchdog / git-diff `since=`).
+5. **Tree-sitter** for SCSS / Markdown / e2e / JSX / TS declarations.
+
+Plus, on top of the structural layer:
+
+6. **Convention rules** — pluggable semantic overlay encoding project-
+   wide patterns the structural layer can't see (JSX wrappers, data
+   providers, etc).
 
 Non-negotiable: keep the same HTTP contract that the MCP wrapper
 (`arenadata-mcp/tools/kg.py`) already speaks.
 
-## Status: Stage 2 complete
+## Status — Stage 3 (semantic conventions)
 
-Every extractor and endpoint from the master stack has been ported to
-the new foundation. `experiment/pro-stack` is feature-complete for
-the MCP contract and adds two new capabilities (`/sanity` probes,
-`/types/*`).
+Stage 1 (SCIP + Memgraph foundation) and Stage 2 (all 8 extractors +
+endpoints + MCP wrapper) are complete. Stage 3 adds the convention
+framework; first rule (`page_data_provider`) shipped.
 
 ### Numbers on adsw (latest reindex)
 
-| Extractor | Nodes | Edges | Time |
-|---|---|---|---|
-| gql         | 202 GqlOperation, 93 GqlHook, 268 File | 431 | 159 ms |
-| routes      | 101 Route, 61 Component, 2 Guard, 30 Permission | 452 | ~95 ms |
-| permissions | 135 Permission, 7 Role               | 265 | 33 ms |
-| pages       | 56 Page, 95 Component                 | 95  | 28 ms |
-| e2e         | 187 TestId, 3 E2eSpec, 60 File        | 199 | 246 ms |
-| scss        | 22 ScssModule, 67 ScssClass, 43 File  | 111 | 95 ms |
-| docs        | 3 Doc                                 | 0   | 3 ms |
-| types       | 114 Type, 290 consumer File           | 1370| 519 ms |
-| **scip-typescript** | — | — | **5.2 s** |
-| **total** | | | **~6.5 s** |
+| Stage | Name | Nodes | Edges | Time |
+|---|---|---|---|---|
+| extractor | gql         | 202 GqlOperation, 93 GqlHook, 268 File | 431 | 163 ms |
+| extractor | routes      | 101 Route, 61 Component, 2 Guard, 30 Permission | 452 | ~95 ms |
+| extractor | permissions | 135 Permission, 7 Role | 265 | 31 ms |
+| extractor | pages       | 56 Page, 95 Component | 95 | 25 ms |
+| extractor | e2e         | 187 TestId, 3 E2eSpec, 60 File | 199 | 226 ms |
+| extractor | scss        | 22 ScssModule, 67 ScssClass, 43 File | 111 | 80 ms |
+| extractor | docs        | 4 Doc | 0 | 4 ms |
+| extractor | types       | 114 Type, 290 consumer File | 1370 | 512 ms |
+| convention | **page_data_provider** | **28 PageDataProviderHook** | **73** | **73 ms** |
+| **scip-typescript** | — | — | — | **5.2 s** |
+| **total** | | | | **~6.5 s** |
 
-## Commits on this branch
+## Done — current scope
 
-```
-75f66e1 feat(api): /routes/{list,resolve,by-component} endpoints
-7d46018 feat(routes): tree-sitter-tsx routes extractor + tsconfig path resolver
-0af8a53 docs: WORK_LOG for the pro-stack rewrite
-5cfbb9b feat(api): /gql endpoints + kind/gql_name capture in extractor
-5dd2e3f feat(pipeline): SCIP→extractor→Memgraph runs end-to-end with gql
-d03ed47 feat(rewrite): scrap legacy, scaffold Memgraph + SCIP foundation
-adddfac feat(scip): stage 1 — SCIP indexer + gql/hooks extractor
-9f12409 feat(permissions): extractor + /permissions/{list,info} endpoints
-6765cc2 feat(pages): filesystem extractor + /pages/{list,get} endpoints
-7a3aa39 feat(e2e): tree-sitter testid scanner + /e2e/{specs,testid,coverage,uncovered}
-6a236be feat(scss): tree-sitter-scss modules extractor + /scss/{list,class}
-d358367 feat(docs): tree-sitter-markdown extractor + /docs/{list,search,get}
-d08819e feat(types): tree-sitter typescript types extractor + /types/{list,get,search}
-```
+### Foundation + extractors (Stage 1–2)
+- `scip-indexer/` — pinned `@sourcegraph/scip-typescript@0.4.0`
+- `docker-compose.yml` — Memgraph 3.6 + Lab + optional Sourcegraph profile
+- `kg/settings.py`, `kg/db.py`, `kg/writers/graph.py`, `kg/indexers/*`
+- 8 structural extractors: gql, routes, permissions, pages, e2e, scss,
+  docs, types
+- 25 HTTP endpoints covering the MCP wrapper contract
+- `/sanity` — 10 data-quality probes
+- `/viz/` — cytoscape graph viewer (see below)
+- `kg/watcher.py` + `since=<ref>` short-circuit on `/reindex`
+- 11 pytest tests (~50ms suite)
 
-## Done
+### Conventions (Stage 3, in progress)
+- `kg/indexers/conventions/` — module layout for semantic rules
+- `page_data_provider` — first convention. `<PageDataProvider dataLoaderHook={X}>`
+  binds X as the data dependency of its enclosing Component. Tree-sitter
+  walks the full JSX AST (depth-independent); identifier X resolved
+  to its definition file via SCIP. Emits:
+  `Component -[:LOADS_DATA_VIA]-> PageDataProviderHook -[:CALLS_HOOK]-> GqlHook`
 
-- `scip-indexer/` — pinned `@sourcegraph/scip-typescript@0.4.0`,
-  `scip_pb2.py` generated from `scip.proto`, smoke-test parity with
-  the legacy ts-morph extractor.
-- `docker-compose.yml` — Memgraph 3.6 + Memgraph Lab. No Neo4j.
-- `kg/settings.py` — MEMGRAPH_URI/USER/PASSWORD + PROJECT_<NAME>.
-- `kg/db.py` — driver factory, idempotent `init_schema()` that reads
-  `SHOW INDEX INFO` / `SHOW CONSTRAINT INFO` to skip already-present
-  objects.
-- `kg/writers/graph.py` — batched MERGE for nodes (via `NODE_KEYS`)
-  and grouped edge writes per `(source_label, type, target_label)`.
-- `kg/indexers/tree_sitter_util.py` — shared tree-sitter helpers.
-- `kg/indexers/ts_resolver.py` — tsconfig path-alias resolver (with a
-  JSONC stripper that respects string literals so `@core/*` aliases
-  don't get eaten).
-- `kg/indexers/scip_loader.py`, `kg/indexers/scip_runner.py`,
-  `kg/indexers/base.py`, `kg/indexers/ingest.py` — pipeline plumbing.
-- **Extractors**: `gql`, `routes`, `permissions`, `pages`, `e2e`,
-  `scss`, `docs`, `types_extractor` (Type-label collision avoided in
-  the module name).
-- **API routers**: `gql`, `routes`, `permissions`, `pages`, `e2e`,
-  `scss`, `docs`, `types`, `sanity`, `viz`, plus `health` and
-  `reindex`.
-- `/viz/` cytoscape page wired against Memgraph (`id(n)` not
-  `elementId(n)`).
-- `/sanity?project=X` runs 10 probes — duplicate names, orphans,
-  template leakage, unused permissions, hook callsite outliers, etc.
+### Viz polish
+- CodeMirror Cypher editor with line numbers / dark theme
+- Per-label filter chips with on/off toggle
+- Resizable toolbar (drag handle)
+- Floating draggable detail panel (props + outgoing/incoming with
+  click-to-navigate), width-resizable from left edge, position +
+  width persisted in `localStorage`
+- "Save PNG ⬇" — 2× canvas export
+- `no-store` Cache-Control on `/viz/` to avoid stale-HTML confusion
 
-## To do
+### MCP wrapper
+- `arenadata-mcp/tools/kg.py` rewritten for the SCIP+Memgraph stack
+- 25 tools live: `kg_health`, `kg_reindex` (with `since=`), `kg_sanity`,
+  `gql_list_operations` / `gql_hook_info` / `gql_find_callsites`,
+  `routes_list` / `routes_resolve` / `routes_find_by_component`,
+  `permissions_list` / `permissions_info`,
+  `pages_list` / `pages_get`,
+  `e2e_list_specs` / `e2e_testid_info` / `e2e_coverage` / `e2e_uncovered`,
+  `scss_list_modules` / `scss_class_usage`,
+  `docs_list` / `docs_search` / `docs_get`,
+  `kg_types_list` / `kg_types_get` / `kg_types_search`
+- Enabled on adsw via `arenadata-mcp.project.json` (kg block)
+
+### Control panel
+- `start.py` — questionary menu over rich status panel. Manages
+  Memgraph + Memgraph Lab (Docker), core API (uvicorn), watcher.
+- Auto-execs under `.venv/bin/python` so plain `python3 start.py` works
+- Watcher auto-starts in `Start all` for single-project setups
+
+## Next up
+
+### Conventions (sole remaining product work)
+User hasn't handed us the next pattern definitions yet. When they do,
+each goes as a separate module under `kg/indexers/conventions/`.
+Likely candidates from the conversation:
+- `item_page_form` — `<ItemPage><Form /></ItemPage>` JSX shell
+- guard-with-roles propagation — runtime permission checks inside forms
+- Network project's twin conventions (same patterns, different shells)
+
+### True per-file incremental indexing
+Currently `/reindex?since=…` short-circuits when nothing changed.
+When something does change, we still rerun the full SCIP + all
+extractors. Plan:
+1. Pass the changed-paths list from the watcher into reindex()
+2. Per-extractor `affected_paths` predicate — skip if irrelevant
+3. Scoped wipes (delete only the slice attributable to the changed files)
+
+SCIP is still all-or-nothing per package (scip-typescript limitation),
+so the SCIP run can't be split. But the extractor stage can — and
+that's where most of the 1.3s lives for our biggest extractor (types).
 
 ### Sourcegraph self-hosted
-Pending. Would host the existing `.scip` files for a richer code-search
-UI; doesn't block the MCP contract.
+Container is parked behind `docker compose --profile sourcegraph up`.
+Not exercised yet. First-run guide in README; admin account + code
+host setup still needed.
 
-### Incremental indexing
-Pending. Currently every `/reindex` runs scip-typescript from scratch.
-Next steps:
-- watchdog (or git-diff-based trigger) to invalidate per-file slices
-- per-file extractor inputs so we can re-run on just the changed paths
-- partial graph wipes scoped to the touched file set
+### Tests beyond the pure-parse extractors
+- API-against-real-Memgraph for the gql/routes/types/sanity endpoints
+- Convention regression: feed a tiny JSX snippet, assert the emitted
+  edges are exact
 
-### Tests
-- `tests/conftest.py` with a Memgraph fixture (separate DB or full
-  wipe between tests)
-- per-extractor tests using a small committed `.scip` fixture from a
-  minimal sample workspace
-- API tests against a seeded Memgraph
+### Sanity probe ideas surfaced during testing
+- "two Components with same name in different files" (we have this)
+- "Routes pointing at a Component that doesn't exist" (broken render)
+- "PageDataProviderHook with no matching gql edges" (broken inference)
 
-### Known gaps
-- 33 of 202 gql operations carry no `kind`/`gql_name` — they use the
-  keyword-less `gql\`{ ... }\`` form. Probably default to `"query"`
-  when they sit under `src/gql/queries/`.
-- Memgraph 3 has no composite indexes; we use per-property indexes
-  for now and revisit if perf degrades.
-
-## How to run what's here
+## How to run
 
 ```bash
-# 1. Memgraph
-docker compose up -d memgraph
+# 1. Bring up everything via the menu
+uv run python start.py   # then "Start all"
+# (Memgraph + Lab in Docker, core API, watcher all come up)
 
-# 2. Core API
-uv run uvicorn kg.server:app --host 127.0.0.1 --port 7400
+# 2. Open the dashboards
+open http://localhost:3000      # Memgraph Lab
+open http://127.0.0.1:7400/viz/ # our viewer
+open http://127.0.0.1:7400/docs # Swagger
 
-# 3. Full reindex
-curl -X POST 'http://127.0.0.1:7400/reindex?project=adsw'
-
-# 4. Live endpoint sample
+# 3. Live endpoint sample
 curl 'http://127.0.0.1:7400/routes/resolve?project=adsw&path=/services/education/booking'
-
-# 5. Data quality probes
 curl 'http://127.0.0.1:7400/sanity?project=adsw'
-
-# 6. Graph viewer
-open http://127.0.0.1:7400/viz/
 ```
+
+## Commit log
+
+`git log experiment/pro-stack --oneline ^master` for the full list
+(~40 commits since the branch diverged).
