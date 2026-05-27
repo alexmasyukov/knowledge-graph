@@ -17,8 +17,8 @@ turn calls usePartnerDistroApplications which wraps GET_PARTNER_…).
 
 This convention turns that into explicit graph edges:
 
-  Component  -[:LOADS_DATA_VIA {convention: 'page_data_provider'}]->  LocalHook
-  LocalHook  -[:CALLS_HOOK]->                                          GqlHook
+  Component  -[:LOADS_DATA_VIA {convention: 'page_data_provider'}]->  PageDataProviderHook
+  PageDataProviderHook  -[:CALLS_HOOK]->                                          GqlHook
 
 …so a viz query like
     MATCH (c:Component {name: 'DistroApplication'})-[*1..3]->(target)
@@ -31,9 +31,9 @@ Algorithm:
   4. Find the dataLoaderHook attribute, take its identifier value.
   5. Resolve identifier → its definition file via SCIP (the identifier's
      occurrence at the matched (row, col) carries a symbol → definitions[0]).
-  6. Emit LocalHook(file, name) + edges. Reuse the existing File→GqlHook
-     edges to also draw LocalHook→GqlHook (file-level approximation: any
-     gql hook called anywhere in the LocalHook's file).
+  6. Emit PageDataProviderHook(file, name) + edges. Reuse the existing File→GqlHook
+     edges to also draw PageDataProviderHook→GqlHook (file-level approximation: any
+     gql hook called anywhere in the PageDataProviderHook's file).
 """
 
 from __future__ import annotations
@@ -181,7 +181,7 @@ class PageDataProviderConvention:
                         "line": hook_line,
                     })
 
-                    # Component → LocalHook (one per Component in this file).
+                    # Component → PageDataProviderHook (one per Component in this file).
                     for comp_name in comps_by_file.get(rel_path, []):
                         edges.append({
                             "source": {
@@ -190,19 +190,19 @@ class PageDataProviderConvention:
                             },
                             "type": "LOADS_DATA_VIA",
                             "target": {
-                                "label": "LocalHook",
+                                "label": "PageDataProviderHook",
                                 "key": {"project": ctx.project.name, "file": hook_file, "name": hook_name},
                             },
                             "props": {"convention": self.NAME},
                         })
 
-                    # LocalHook → GqlHook (file-level approximation: every gql
+                    # PageDataProviderHook → GqlHook (file-level approximation: every gql
                     # hook that anything in this file calls). Good enough for
                     # the common case "one local hook per file".
                     for gql_sym in file_to_gql_hooks.get(hook_file, []):
                         edges.append({
                             "source": {
-                                "label": "LocalHook",
+                                "label": "PageDataProviderHook",
                                 "key": {"project": ctx.project.name, "file": hook_file, "name": hook_name},
                             },
                             "type": "CALLS_HOOK",
@@ -217,7 +217,7 @@ class PageDataProviderConvention:
                     break  # one dataLoaderHook per PageDataProvider
 
         return IngestResult(
-            nodes={"LocalHook": list(local_hooks.values())},
+            nodes={"PageDataProviderHook": list(local_hooks.values())},
             edges=edges,
             stats={
                 "matches": matches,

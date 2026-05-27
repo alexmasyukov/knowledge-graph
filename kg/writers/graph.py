@@ -27,7 +27,7 @@ NODE_KEYS: dict[str, tuple[str, ...]] = {
     "File":         ("project", "path"),
     "GqlOperation": ("project", "symbol"),
     "GqlHook":      ("project", "symbol"),
-    "LocalHook":    ("project", "file", "name"),
+    "PageDataProviderHook":    ("project", "file", "name"),
     "Component":    ("project", "file", "name"),
     "Route":        ("project", "path", "depth", "line"),
     "Page":         ("project", "domain", "entity"),
