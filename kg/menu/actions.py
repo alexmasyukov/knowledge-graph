@@ -36,6 +36,25 @@ def start_all() -> None:
                 time.sleep(1)
     console.print("[green]✓[/green] Memgraph ready")
     _start_svc(CORE, "core")
+    _autostart_watcher()
+
+
+def _autostart_watcher() -> None:
+    """Single-project mode: auto-start the watcher for the only project
+    in .env. Multi-project setups won't fly through here — for those use
+    the explicit `Start watcher` menu item."""
+    if WATCHER.alive():
+        return
+    if len(PROJECTS) != 1:
+        return
+    project = PROJECTS[0]
+    svc = watcher_for(project)
+    with console.status(f"[cyan]Starting watcher for {project}…", spinner="dots"):
+        svc.start()
+    if svc.alive():
+        console.print(f"[green]✓[/green] watcher up ({project}) — pid {svc.pid()}")
+    else:
+        console.print(f"[red]✗[/red] watcher failed to start — see {svc.log_file}")
 
 
 def _start_svc(svc, label: str, timeout: float = 15.0) -> None:
