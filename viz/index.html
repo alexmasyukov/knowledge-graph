@@ -93,16 +93,17 @@
     #stage { display: flex; position: relative; flex: 1; min-height: 0; }
     #cy { flex: 1; }
 
-    /* Detail panel — fixed overlay on the right, never reshapes the graph. */
+    /* Detail panel — fixed overlay, anchored top-right by default, draggable. */
     #detail {
       position: fixed;
-      right: 0;
-      bottom: 0;
+      right: 12px;
       width: 380px;
       max-width: 40vw;
+      max-height: calc(100vh - 160px);
       background: #232323;
-      border-left: 1px solid #3a3a3a;
-      box-shadow: -4px 0 14px rgba(0,0,0,0.4);
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      box-shadow: -2px 4px 18px rgba(0,0,0,0.45);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -110,23 +111,26 @@
       transition: transform 0.15s ease-out;
       z-index: 50;
     }
-    #detail.collapsed { transform: translateX(100%); }
+    #detail.collapsed { transform: translateX(calc(100% + 24px)); }
+    #detail.dragging { transition: none; user-select: none; }
+    #detail-header { cursor: move; }
     #detail-header {
-      padding: 10px 14px;
+      padding: 12px 16px;
       border-bottom: 1px solid #3a3a3a;
-      display: flex; align-items: center; gap: 8px;
+      display: flex; align-items: center; gap: 10px;
       flex: 0 0 auto;
     }
     #detail-label {
-      font-size: 11px;
+      font-size: 13px;
       letter-spacing: 0.5px;
       text-transform: uppercase;
-      padding: 2px 8px;
+      padding: 4px 10px;
       border-radius: 3px;
+      font-weight: 700;
     }
     #detail-caption {
       font-family: 'SF Mono', Consolas, monospace;
-      font-size: 13px;
+      font-size: 15px;
       color: #e0e0e0;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -135,41 +139,41 @@
     }
     #detail-close {
       background: transparent; color: #888; border: 0;
-      cursor: pointer; padding: 4px 8px; border-radius: 3px;
-      font-size: 18px; line-height: 1;
+      cursor: pointer; padding: 4px 10px; border-radius: 3px;
+      font-size: 22px; line-height: 1;
     }
     #detail-close:hover { background: #3a3a3a; color: #e0e0e0; }
     #detail-body {
-      padding: 12px 14px; overflow-y: auto; flex: 1; font-size: 12px;
+      padding: 14px 16px; overflow-y: auto; flex: 1; font-size: 14px;
     }
     #detail-body h4 {
-      margin: 14px 0 6px 0; font-size: 11px;
+      margin: 16px 0 8px 0; font-size: 13px;
       text-transform: uppercase; letter-spacing: 0.5px;
-      color: #888; font-weight: 500;
+      color: #aaa; font-weight: 600;
     }
     #detail-body h4:first-child { margin-top: 0; }
-    .prop-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Consolas, monospace; font-size: 11px; }
-    .prop-table td { padding: 3px 6px; vertical-align: top; word-break: break-word; }
+    .prop-table { width: 100%; border-collapse: collapse; font-family: 'SF Mono', Consolas, monospace; font-size: 13px; }
+    .prop-table td { padding: 5px 8px; vertical-align: top; word-break: break-word; }
     .prop-table tr:nth-child(odd) { background: #1d1d1d; }
-    .prop-key { color: #888; width: 40%; }
-    .prop-value { color: #e0e0e0; }
+    .prop-key { color: #aaa; width: 38%; }
+    .prop-value { color: #e8e8e8; }
     .neighbour {
-      display: flex; align-items: center; gap: 6px;
-      padding: 4px 6px; border-radius: 3px; font-size: 11px;
-      cursor: pointer; margin: 1px 0;
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 4px; font-size: 13px;
+      cursor: pointer; margin: 2px 0;
     }
     .neighbour:hover { background: #2c2c2c; }
-    .neighbour .arrow { color: #555; font-family: monospace; font-size: 10px; }
-    .neighbour .rel { color: #888; font-size: 10px; }
+    .neighbour .arrow { color: #777; font-family: monospace; font-size: 13px; }
+    .neighbour .rel { color: #aaa; font-size: 12px; }
     .neighbour .target-label {
-      color: #1a1a1a; padding: 1px 5px; border-radius: 2px;
-      font-size: 10px; font-weight: 600;
+      color: #1a1a1a; padding: 2px 7px; border-radius: 3px;
+      font-size: 12px; font-weight: 700;
     }
     .neighbour .target-caption {
-      color: #e0e0e0; flex: 1; overflow: hidden;
+      color: #e8e8e8; flex: 1; overflow: hidden;
       text-overflow: ellipsis; white-space: nowrap;
     }
-    .empty-hint { color: #555; font-style: italic; padding: 8px 0; }
+    .empty-hint { color: #666; font-style: italic; padding: 10px 0; font-size: 13px; }
 
     #status {
       position: fixed; bottom: 12px; left: 12px;
@@ -259,14 +263,58 @@ RETURN r, c, p, h, op LIMIT 200</textarea>
     let cmEditor = null;
     const visibleLabels = new Set();
 
-    // ── keep detail panel below toolbar+filters ─────────────────────
+    // ── keep detail panel below toolbar+filters (unless user dragged it) ─
+    let detailDragged = false;
+
     function syncDetailTop() {
+      if (detailDragged) return;
       const tw = document.getElementById('toolbar-wrap');
       const f = document.getElementById('filters');
-      const top = (tw ? tw.offsetHeight : 0) + (f ? f.offsetHeight : 0);
-      document.getElementById('detail').style.top = top + 'px';
+      const top = (tw ? tw.offsetHeight : 0) + (f ? f.offsetHeight : 0) + 12;
+      const detail = document.getElementById('detail');
+      detail.style.top = top + 'px';
+      detail.style.maxHeight = `calc(100vh - ${top + 24}px)`;
     }
     window.addEventListener('resize', syncDetailTop);
+
+    // ── drag the panel by its header ────────────────────────────────
+    (function setupDetailDrag() {
+      const detail = document.getElementById('detail');
+      const header = document.getElementById('detail-header');
+      let dragging = false, offX = 0, offY = 0;
+      header.addEventListener('mousedown', e => {
+        // Don't grab when clicking the close button.
+        if (e.target.id === 'detail-close') return;
+        dragging = true;
+        detailDragged = true;
+        const rect = detail.getBoundingClientRect();
+        offX = e.clientX - rect.left;
+        offY = e.clientY - rect.top;
+        detail.classList.add('dragging');
+        e.preventDefault();
+      });
+      document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const x = Math.max(0, Math.min(window.innerWidth - 40, e.clientX - offX));
+        const y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - offY));
+        detail.style.left = x + 'px';
+        detail.style.top = y + 'px';
+        detail.style.right = 'auto';
+      });
+      document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        detail.classList.remove('dragging');
+      });
+      // Double-click header → snap back to top-right
+      header.addEventListener('dblclick', e => {
+        if (e.target.id === 'detail-close') return;
+        detailDragged = false;
+        detail.style.left = 'auto';
+        detail.style.right = '12px';
+        syncDetailTop();
+      });
+    })();
 
     // ── CodeMirror init ─────────────────────────────────────────────
     cmEditor = CodeMirror.fromTextArea(document.getElementById('cypher'), {
